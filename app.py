@@ -200,13 +200,13 @@ mw_max = float(m["MW"].max())
 
 # ─────────────────────────── 요약 카드 ───────────────────────────
 c1, c2, c3 = st.columns(3)
-c1.metric("허용 설계범위 통과율", f"{frac:.1f} %",
+c1.metric("통과율", f"{frac:.1f} %",
           help="스윕 격자 중 두 기준(상대+절대) 동시 만족 비율")
-c2.metric("baseline MW", f"{r0['MW']:.2f} V", f"loss {r0['MW_loss']:.1f} %")
+c2.metric("기준 MW", f"{r0['MW']:.2f} V", f"loss {r0['MW_loss']:.1f} %")
 if target <= mw_max:
-    c3.metric("목표 달성 가능성", "가능 ✅", f"이 스택 최대 MW {mw_max:.2f} V")
+    c3.metric("목표 달성", "가능 ✅", f"이 스택 최대 MW {mw_max:.2f} V")
 else:
-    c3.metric("목표 달성 가능성", "불가 ⚠️", f"이 스택 최대 MW {mw_max:.2f} V",
+    c3.metric("목표 달성", "불가 ⚠️", f"이 스택 최대 MW {mw_max:.2f} V",
               delta_color="inverse")
 
 if frac == 0.0 or target > mw_max:
