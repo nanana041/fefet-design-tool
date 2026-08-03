@@ -50,7 +50,7 @@ st.markdown(
 )
 
 # ─────────────────────────── 헤더 ───────────────────────────
-st.header(" HfO₂ FeFET 허용 설계범위 시뮬레이터")
+st.title(" HfO₂ FeFET 허용 설계범위 시뮬레이터")
 st.caption(
     "Compact-model 시뮬레이션 도구임 (소자 제작/측정이 아님)." f"<br>"
     "목표 Memory Window(MW)를 정하면, 그 목표를 만족하는 허용 설계범위(D_it–t_IL)와 D_it 상한 처방을 계산함."
