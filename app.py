@@ -244,7 +244,7 @@ with tab1:
         f"<span style='color:#111;font-weight:700'>╌╌ 검정 파선</span> = MW {target:.1f} V (절대) ≡ {loss_abs:.0f}%"
         f" <br> "
         f"<span style='font-weight:700'>○ 처방점</span> = 허용 D_it 상한 [×10¹² cm⁻²eV⁻¹]"
-        f" <br>; 색 = MW_loss (5%마다, ≥50% 노랑)"
+        f" <br> 색 = MW_loss (5%마다, ≥50% 노랑)"
         f"</div>",
         unsafe_allow_html=True,
     )
