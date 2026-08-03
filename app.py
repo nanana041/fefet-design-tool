@@ -27,6 +27,13 @@ from designmap import window_mask, dit_upper_bounds
 import plot_tool
 
 st.set_page_config(page_title="FeFET 목표-적응 설계범위 시뮬레이터", layout="wide")
+st.markdown("""
+<style>
+/* 요약 카드(통과율·baseline MW·목표 달성)를 폰에서도 가로 한 줄로 */
+div[data-testid="stHorizontalBlock"]:has([data-testid="stMetric"]){flex-wrap:nowrap !important;}
+div[data-testid="stHorizontalBlock"]:has([data-testid="stMetric"]) > div{min-width:0 !important;}
+</style>
+""", unsafe_allow_html=True)
 
 # ── 슬라이더 값 숫자 색: 손실 허용치=빨강, 레벨당 마진=검정 (막대는 Streamlit 한계로 파랑 유지) ──
 #   (앵커 다음 슬라이더의 값 숫자만 CSS로 색칠 — 이 부분은 확실히 동작)
