@@ -240,11 +240,11 @@ with tab1:
     st.markdown(
         f"<div style='font-size:0.9em;line-height:1.8'>"
         f"<span style='color:#d1341f;font-weight:700'>━━ 빨강 실선</span> = MW_loss {loss_max:.0f}% (상대) ≡ MW {mw_rel:.1f} V"
-        f" &nbsp;|&nbsp; "
+        f" <br>"
         f"<span style='color:#111;font-weight:700'>╌╌ 검정 파선</span> = MW {target:.1f} V (절대) ≡ {loss_abs:.0f}%"
-        f" &nbsp;|&nbsp; "
+        f" <br> "
         f"<span style='font-weight:700'>○ 처방점</span> = 허용 D_it 상한 [×10¹² cm⁻²eV⁻¹]"
-        f" &nbsp;|&nbsp; 색 = MW_loss (5%마다, ≥50% 노랑)"
+        f" <br>; 색 = MW_loss (5%마다, ≥50% 노랑)"
         f"</div>",
         unsafe_allow_html=True,
     )
