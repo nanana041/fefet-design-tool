@@ -27,7 +27,7 @@ from designmap import window_mask, dit_upper_bounds
 import plot_tool
 
 st.set_page_config(page_title="FeFET 목표-적응 설계범위 시뮬레이터", layout="wide")
-st.markdown("<style>html{font-size:16px;}</style>", unsafe_allow_html=True)
+
 # ── 슬라이더 값 숫자 색: 손실 허용치=빨강, 레벨당 마진=검정 (막대는 Streamlit 한계로 파랑 유지) ──
 #   (앵커 다음 슬라이더의 값 숫자만 CSS로 색칠 — 이 부분은 확실히 동작)
 st.markdown(
@@ -43,7 +43,7 @@ st.markdown(
 )
 
 # ─────────────────────────── 헤더 ───────────────────────────
-st.header(" HfO₂ FeFET 목표-적응 허용 설계범위 시뮬레이터")
+st.subheader(" HfO₂ FeFET 목표-적응 허용 설계범위 시뮬레이터")
 st.caption(
     "Compact-model 시뮬레이션 도구임 (소자 제작·측정이 아님). "
     "목표 Memory Window(MW)를 정하면, 그 목표를 만족하는 허용 설계범위(D_it–t_IL)와 "
