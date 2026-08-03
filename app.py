@@ -52,7 +52,7 @@ st.markdown(
 # ─────────────────────────── 헤더 ───────────────────────────
 st.header(" HfO₂ FeFET 목표 - 적응 허용 설계범위 시뮬레이터")
 st.caption(
-    "Compact-model 시뮬레이션 도구임 (소자 제작·측정이 아님). "
+    "Compact-model 시뮬레이션 도구임 (소자 제작/측정이 아님). <br>"
     "목표 Memory Window(MW)를 정하면, 그 목표를 만족하는 허용 설계범위(D_it–t_IL)와 "
     "D_it 상한 처방을 계산함."
 )
@@ -224,7 +224,7 @@ if frac == 0.0 or target > mw_max:
         )
 
 # ─────────────────────────── 탭 ───────────────────────────
-tab1, tab2, tab3 = st.tabs(["📊 설계범위 지도 & 처방", "📈 1D 민감도", "📖 방법 · 가정"])
+tab1, tab2, tab3 = st.tabs(["📊 설계범위 지도 & 처방", "📈 1D 민감도", "📖 방법 / 가정"])
 
 with tab1:
     trows = table_bounds(t_fe, pr, dpsi, ec, na, loss_max, target)   # 처방(지도 빨간숫자 + 아래 표 공용)
