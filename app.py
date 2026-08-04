@@ -262,12 +262,21 @@ def table_bounds(t_fe, pr, dpsi, ec, na, loss_max, target):
 
 
 def binding_of_row(r):
-    """이 t_IL 행의 상한을 정한 쪽 — "relative"/"absolute", 도달 불가면 None.
+    """이 t_IL 행의 상한을 정한 쪽 — "relative"/"absolute"/"none", 도달 불가면 None.
 
     ★동률(dit_rel == dit_abs)은 상대로 센다. 계약 test_binding_criterion_switches_at_1_5V
-      가 '1.4 V까지는 상대'로 고정한 지점이 정확히 rel == abs 인 자리이기 때문."""
+      가 '1.4 V까지는 상대'로 고정한 지점이 정확히 rel == abs 인 자리이기 때문.
+    ★"none" = 이 행에서는 **두 기준 다 스윕 범위 안에서 안 걸린다**. 얇은 t_IL 행은
+      D_it 를 1e13 까지 올려도 MW_loss 가 기준에 못 미치는 일이 있다(예: 손실 45 % ·
+      목표 1.3 V 에서 t_IL 0.5 nm 행의 MW_loss 는 최대 33.3 %). 이때 dit_upper_bounds
+      는 상한으로 격자 끝(1e13)을 돌려주는데, 그건 실제 상한이 아니라 "여기까지는
+      확인했다"는 뜻이다. 예전 규칙은 dit_abs 가 None 이면 무조건 relative 로 봤기
+      때문에 이 칸이 빨강으로 칠해져, 걸리지도 않은 상대 기준이 상한을 정한 것처럼
+      보였다."""
     if r["dit_max"] is None:
         return None
+    if r["dit_rel"] is None and r["dit_abs"] is None:
+        return "none"
     if r["dit_abs"] is None:
         return "relative"
     if r["dit_rel"] is not None and r["dit_rel"] <= r["dit_abs"] * (1 + 1e-9):
@@ -276,11 +285,14 @@ def binding_of_row(r):
 
 
 def binding_of(rows):
-    """지금 목표에서 어느 기준이 구속(binding)인지 — "relative"/"absolute"/"unreachable"."""
-    live = [b for b in (binding_of_row(r) for r in rows) if b is not None]
-    if not live:
-        return "unreachable"
-    return "relative" if live.count("relative") * 2 >= len(live) else "absolute"
+    """지금 목표에서 어느 기준이 구속인지 — "relative"/"absolute"/"none"/"unreachable"."""
+    b = [binding_of_row(r) for r in rows]
+    live = [x for x in b if x in ("relative", "absolute")]
+    if live:
+        return "relative" if live.count("relative") * 2 >= len(live) else "absolute"
+    if "none" in b:
+        return "none"          # 스윕 범위 전체가 두 기준을 만족 — 구속하는 것이 없음
+    return "unreachable"
 
 
 @st.cache_data(show_spinner=False)
@@ -410,11 +422,18 @@ with tab1:
     else:
         abs_html = (f"<span style='color:#111;font-weight:700'>╌╌ 검정 파선</span>"
                     f" = MW {target:.1f} V (절대) ≡ {loss_abs:.0f}%")
+    # 회색 "≥10" 점이 하나라도 있으면 그게 뭔지 설명해 준다(실제 상한이 아님)
+    edge_html = ""
+    if any(p["bind"] == "none" for p in presc):
+        edge_html = (" <br> <span style='color:#6b6b6b;font-weight:700'>○ 회색 ≥10</span>"
+                     " = 그 t_IL 에서는 D_it 를 스윕 끝(1×10¹³)까지 올려도 두 기준에 안 걸림"
+                     " — 실제 상한은 이 범위 <b>밖</b>이라 하한만 표시함")
     st.markdown(
         f"<div style='font-size:0.9em;line-height:1.8'>{rel_html}"
         f" <br>{abs_html}"
         f" <br> "
         f"<span style='font-weight:700'>○ 처방점</span> = 허용 D_it 상한 [×10¹² cm⁻²eV⁻¹]"
+        f" (테두리 색 = 그 값을 정한 기준){edge_html}"
         f" <br> 색 = MW_loss (5%마다, ≥50% 노랑)"
         f"</div>",
         unsafe_allow_html=True,
@@ -441,6 +460,11 @@ with tab1:
                 f"걸림. 여기서부터는 목표를 올릴수록 허용 D_it 상한이 급격히 좁아짐."
                 + _swtxt)
         _fg, _bg = "#111111", "#f1f2f4"
+    elif _bind == "none":
+        _msg = (f"<b style='color:#6b6b6b'>구속하는 기준 없음</b> — 스윕한 D_it 범위"
+                f"(≤ 1×10¹³) 안에서는 두 기준 모두 걸리지 않음. 이 조건에서는 계면이 "
+                f"제약이 아니라는 뜻이고, 처방점은 실제 상한이 아니라 격자 끝임." + _swtxt)
+        _fg, _bg = "#6b6b6b", "#f2f2f4"
     else:
         _msg = (f"<b style='color:#a06a00'>도달 불가</b> — 이 스택은 D_it를 아무리 낮춰도 "
                 f"목표 MW {target:.2f} V에 못 미침. 허용 상한이 존재하지 않으므로 아래 "

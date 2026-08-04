@@ -126,19 +126,23 @@ def plot_designmap(m, target_mw, mw_loss_max, frac, presc, mw_ref):
                            linestyles="--", linewidths=2.2, zorder=3)
         _set_pe(c_abs, 3.5, "white")
 
-    # 동적 처방: 흰 원마커 + 흰 박스 숫자(×10¹²) — 그림 밖으로 안 나가게 위치 보정
-    #   ★원 테두리 색 = 그 점의 상한을 정한 기준의 색. 상대 기준이면 빨강(빨간 실선 위),
-    #     절대 기준이면 검정(검은 파선 위). 점이 어느 선을 따라가고 있는지가 색으로 보인다.
+    # 동적 처방: 흰 원마커 + 박스 숫자(×10¹²) — 그림 밖으로 안 나가게 위치 보정
+    #   ★색 = 그 점의 상한을 정한 기준. 상대면 빨강(빨간 실선 위), 절대면 검정(검은 파선
+    #     위). 어느 쪽도 스윕 범위 안에서 안 걸린 행("none")은 **회색 + "≥10"** 으로
+    #     쓴다 — 그 값은 실제 상한이 아니라 격자 끝(D_it 1e13)이라 하한만 아는 상태다.
+    #     색으로 기준을 말하는 그림에서 이걸 빨강으로 칠하면 걸리지도 않은 기준이 상한을
+    #     정한 것처럼 보인다.
     for p in presc:
-        d, til = p.get("dit_max"), p.get("t_IL")
+        d, til, bind = p.get("dit_max"), p.get("t_IL"), p.get("bind")
         if d is None or d > 1.02e13:
             continue
-        bc = "black" if p.get("bind") == "absolute" else RED   # 구속 기준의 색
+        bc = {"absolute": "black", "relative": RED}.get(bind, "#6b6b6b")
         ax.plot([d], [til], "o", mfc="white", mec=bc, mew=2.2, ms=9, zorder=6)
         logpos = (np.log10(d) - 11.0) / 2.0                       # 0(1e11)~1(1e13)
         xoff, ha = (16, "left") if logpos < 0.24 else (-16, "right")  # 왼쪽 끝이면 박스 오른쪽
         dy = -13 if til >= 1.9 else (13 if til <= 0.6 else 0)     # 위/아래 끝이면 안쪽으로
-        ax.annotate(f"{d/1e12:.1f}", xy=(d, til), xytext=(xoff, dy),
+        ax.annotate("≥10" if bind == "none" else f"{d/1e12:.1f}",
+                    xy=(d, til), xytext=(xoff, dy),
                     textcoords="offset points", ha=ha, va="center",
                     fontsize=12, fontweight="bold", color="white",
                     # 상자 배경도 구속 기준의 색으로 — 숫자와 그 숫자를 만든 선이 같은
