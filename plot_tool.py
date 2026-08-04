@@ -120,21 +120,24 @@ def plot_designmap(m, target_mw, mw_loss_max, frac, presc, mw_ref):
                            linestyles="--", linewidths=2.2, zorder=3)
         _set_pe(c_abs, 3.5, "white")
 
-    # 동적 처방: 흰 원마커 + 빨간 박스 숫자(×10¹²) — 그림 밖으로 안 나가게 위치 보정
+    # 동적 처방: 흰 원마커 + 흰 박스 숫자(×10¹²) — 그림 밖으로 안 나가게 위치 보정
+    #   ★원 테두리 색 = 그 점의 상한을 정한 기준의 색. 상대 기준이면 빨강(빨간 실선 위),
+    #     절대 기준이면 검정(검은 파선 위). 점이 어느 선을 따라가고 있는지가 색으로 보인다.
     for p in presc:
         d, til = p.get("dit_max"), p.get("t_IL")
         if d is None or d > 1.02e13:
             continue
-        ax.plot([d], [til], "o", mfc="white", mec=RED, mew=2.2, ms=9, zorder=6)
+        mec = "black" if p.get("bind") == "absolute" else RED
+        ax.plot([d], [til], "o", mfc="white", mec=mec, mew=2.2, ms=9, zorder=6)
         logpos = (np.log10(d) - 11.0) / 2.0                       # 0(1e11)~1(1e13)
         xoff, ha = (16, "left") if logpos < 0.24 else (-16, "right")  # 왼쪽 끝이면 박스 오른쪽
         dy = -13 if til >= 1.9 else (13 if til <= 0.6 else 0)     # 위/아래 끝이면 안쪽으로
         ax.annotate(f"{d/1e12:.1f}", xy=(d, til), xytext=(xoff, dy),
                     textcoords="offset points", ha=ha, va="center",
-                    fontsize=12, fontweight="bold", color="white",
-                    # 검은 배경 + 흰 글씨. 흰 테두리를 남겨 어두운 색띠(보라·남색) 위에서도
-                    # 상자 경계가 보이게 한다.
-                    bbox=dict(boxstyle="round,pad=0.28", fc="black", ec="white", lw=1.0),
+                    fontsize=12, fontweight="bold", color="black",
+                    # 흰 배경 + 검은 글씨. 검은 테두리를 둘러 밝은 색띠(노랑·연두) 위에서도
+                    # 상자 경계가 사라지지 않게 한다.
+                    bbox=dict(boxstyle="round,pad=0.28", fc="white", ec="black", lw=1.0),
                     zorder=7)
 
     ax.set_xscale("log")

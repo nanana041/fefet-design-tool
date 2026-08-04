@@ -261,18 +261,26 @@ def table_bounds(t_fe, pr, dpsi, ec, na, loss_max, target):
     return dit_upper_bounds(compute_tab_map(t_fe, pr, dpsi, ec, na), loss_max, target)
 
 
-def binding_of(rows):
-    """지금 목표에서 어느 기준이 구속(binding)인지 — "relative"/"absolute"/"unreachable".
+def binding_of_row(r):
+    """이 t_IL 행의 상한을 정한 쪽 — "relative"/"absolute", 도달 불가면 None.
 
     ★동률(dit_rel == dit_abs)은 상대로 센다. 계약 test_binding_criterion_switches_at_1_5V
       가 '1.4 V까지는 상대'로 고정한 지점이 정확히 rel == abs 인 자리이기 때문."""
-    live = [r for r in rows if r["dit_max"] is not None]
+    if r["dit_max"] is None:
+        return None
+    if r["dit_abs"] is None:
+        return "relative"
+    if r["dit_rel"] is not None and r["dit_rel"] <= r["dit_abs"] * (1 + 1e-9):
+        return "relative"
+    return "absolute"
+
+
+def binding_of(rows):
+    """지금 목표에서 어느 기준이 구속(binding)인지 — "relative"/"absolute"/"unreachable"."""
+    live = [b for b in (binding_of_row(r) for r in rows) if b is not None]
     if not live:
         return "unreachable"
-    rel = sum(1 for r in live
-              if r["dit_abs"] is None
-              or (r["dit_rel"] is not None and r["dit_rel"] <= r["dit_abs"] * (1 + 1e-9)))
-    return "relative" if rel * 2 >= len(live) else "absolute"
+    return "relative" if live.count("relative") * 2 >= len(live) else "absolute"
 
 
 @st.cache_data(show_spinner=False)
@@ -326,7 +334,9 @@ tab1, tab2, tab3 = st.tabs(["📊 설계범위 지도 & 처방", "📈 1D 민감
 
 with tab1:
     trows = table_bounds(t_fe, pr, dpsi, ec, na, loss_max, target)   # 처방(지도 빨간숫자 + 아래 표 공용)
-    presc = [{"t_IL": r["t_IL"], "dit_max": r["dit_max"]} for r in trows]
+    # bind: 이 점의 상한을 정한 기준 → 지도에서 원 테두리 색(빨강/검정)으로 쓰인다
+    presc = [{"t_IL": r["t_IL"], "dit_max": r["dit_max"], "bind": binding_of_row(r)}
+             for r in trows]
     # ── 헤드라인: Design window 지도 ──
     #   use_container_width=True: 컨테이너 폭에 맞춰 전체를 스케일(잘림·2배 확대 방지)
     #   ★bbox_inches=None 필수. st.pyplot 은 기본이 bbox_inches="tight" 라서 그려진
