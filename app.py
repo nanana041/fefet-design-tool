@@ -321,11 +321,37 @@ with tab1:
     # ── 범례(MW_loss·MW·allowable D_it)를 그림 아래에 표기 (동적) ──
     mw_rel = r0["MW_ref"] * (1.0 - loss_max / 100.0)
     loss_abs = (r0["MW_ref"] - target) / r0["MW_ref"] * 100.0
+    # ★기준선이 지도 밖으로 나가면 왜 없는지 적는다.
+    #   contour는 레벨이 데이터 범위 밖이면 아무것도 그리지 않는다. 슬라이더를 끝까지
+    #   밀면 실제로 그렇게 된다 — 기본 스택의 MW_loss는 10.5~85.5 %라 손실 허용치
+    #   10 %는 격자 아래로 빠지고, MW는 최대 1.79 V라 목표 2.0 V는 격자 위로 빠진다.
+    #   선만 조용히 사라지면 고장으로 보이므로, 없는 이유와 그 뜻을 대신 표시한다.
+    #   (아래로 벗어남 = 전 구간 미달 / 위로 벗어남 = 전 구간 통과 — 뜻이 정반대다.)
+    l_lo, l_hi = float(m["MW_loss"].min()), float(m["MW_loss"].max())
+    w_lo, w_hi = float(m["MW"].min()), float(m["MW"].max())
+    GRAY = "<span style='color:#777'>"
+    if loss_max < l_lo:
+        rel_html = (f"{GRAY}빨강 실선 없음</span> — 이 격자의 MW_loss 최소가 "
+                    f"{l_lo:.1f} %라 {loss_max:.0f} % 등고선이 지도 아래로 벗어남. "
+                    f"<b>전 구간이 상대 기준 미달</b>임.")
+    elif loss_max > l_hi:
+        rel_html = (f"{GRAY}빨강 실선 없음</span> — MW_loss 최대가 {l_hi:.1f} %라 "
+                    f"지도 전체가 상대 기준을 통과함(이 기준은 구속하지 않음).")
+    else:
+        rel_html = (f"<span style='color:#d1341f;font-weight:700'>━━ 빨강 실선</span>"
+                    f" = MW_loss {loss_max:.0f}% (상대) ≡ MW {mw_rel:.1f} V")
+    if target > w_hi:
+        abs_html = (f"{GRAY}검정 파선 없음</span> — 이 스택의 MW 최대가 {w_hi:.2f} V라 "
+                    f"목표 {target:.2f} V에 <b>전 구간 도달 불가</b>.")
+    elif target < w_lo:
+        abs_html = (f"{GRAY}검정 파선 없음</span> — MW 최소가 {w_lo:.2f} V라 지도 전체가 "
+                    f"목표를 넘김(이 기준은 구속하지 않음).")
+    else:
+        abs_html = (f"<span style='color:#111;font-weight:700'>╌╌ 검정 파선</span>"
+                    f" = MW {target:.1f} V (절대) ≡ {loss_abs:.0f}%")
     st.markdown(
-        f"<div style='font-size:0.9em;line-height:1.8'>"
-        f"<span style='color:#d1341f;font-weight:700'>━━ 빨강 실선</span> = MW_loss {loss_max:.0f}% (상대) ≡ MW {mw_rel:.1f} V"
-        f" <br>"
-        f"<span style='color:#111;font-weight:700'>╌╌ 검정 파선</span> = MW {target:.1f} V (절대) ≡ {loss_abs:.0f}%"
+        f"<div style='font-size:0.9em;line-height:1.8'>{rel_html}"
+        f" <br>{abs_html}"
         f" <br> "
         f"<span style='font-weight:700'>○ 처방점</span> = 허용 D_it 상한 [×10¹² cm⁻²eV⁻¹]"
         f" <br> 색 = MW_loss (5%마다, ≥50% 노랑)"
