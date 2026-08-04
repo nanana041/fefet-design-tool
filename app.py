@@ -125,8 +125,12 @@ if tgt_mode == "MLC로 계산":
               help="실제로 만족해야 하는 절대 기준값임. = (N−1)×ΔV_level.")
 else:
     n_lv, dv = 2, None
+    # ⚫ + anch-dv: 목표 MW는 **절대 기준**이므로 지도의 검정 파선과 같은 표기로 묶는다.
+    #   (🔴/anch-loss = 상대 기준 = 지도의 빨간 실선. 이모지는 장식이 아니라 그림의
+    #    어느 선에 대응하는지를 가리키는 표시다.)
+    sb.markdown('<span class="anch-dv"></span>', unsafe_allow_html=True)
     target = float(sb.slider(
-        "🎯 목표 MW [V]", 0.80, 2.00, 1.00, 0.05,
+        "⚫ 목표 MW [V]", 0.80, 2.00, 1.00, 0.05,
         help="이 소자가 만족해야 할 memory window(절대 기준). "
              "★0.8–1.4 V 구간은 답이 전혀 안 변함 — 그 구간에선 손실 허용치(상대 기준)가 "
              "먼저 걸리기 때문이며 고장이 아님. 1.5 V부터 절대 기준으로 바통이 넘어가고, "
