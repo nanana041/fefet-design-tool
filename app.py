@@ -289,35 +289,6 @@ else:
     c3.metric("목표 달성", "불가 ⚠️", f"최대 MW {mw_max:.2f} V",
               delta_color="inverse")
 
-# ── 어느 기준이 구속인가 (이 도구의 하이라이트) ────────────────────────────
-#   기준이 둘이고 둘 다 만족해야 한다: 상대(MW_loss ≤ loss_max) · 절대(MW ≥ target).
-#   먼저 걸리는 쪽이 구속. 목표가 낮으면 상대가, 올리면 절대가 구속으로 바뀐다.
-#   ★"상대 기준이 항상 먼저 걸린다"는 t_FE·E_c를 고정한 이 지도에서만 참이다 —
-#     앱은 슬라이더로 그걸 실제로 뒤집어 보일 수 있다.
-_bind = binding_of(table_bounds(t_fe, pr, dpsi, ec, na, loss_max, target))
-_sw = binding_switch_target(t_fe, pr, dpsi, ec, na, loss_max)
-_swtxt = f" 이 스택에서는 목표 <b>{_sw:.2f} V</b>부터 절대 기준으로 넘어감." if _sw else ""
-if _bind == "relative":
-    _msg = (f"<b style='color:#d1341f'>지금은 상대 기준이 구속</b> — 손실 허용치"
-            f"(MW_loss ≤ {loss_max:.0f} %)가 먼저 걸림. "
-            f"이 구간에서는 <b>목표 MW를 올려도 허용 D_it 상한이 변하지 않음</b>(고장 아님)."
-            + _swtxt)
-    _fg, _bg = "#d1341f", "#fdf0ed"
-elif _bind == "absolute":
-    _msg = (f"<b>지금은 절대 기준이 구속</b> — 목표 MW ≥ {target:.2f} V가 먼저 걸림. "
-            f"여기서부터는 목표를 올릴수록 허용 D_it 상한이 급격히 좁아짐." + _swtxt)
-    _fg, _bg = "#111111", "#f1f2f4"
-else:
-    _msg = (f"<b style='color:#a06a00'>도달 불가</b> — 이 스택은 D_it를 아무리 낮춰도 "
-            f"목표 MW {target:.2f} V에 못 미침. 허용 상한이 존재하지 않으므로 처방표에 "
-            f"'—'로 표시됨." + _swtxt)
-    _fg, _bg = "#a06a00", "#fdf7e8"
-st.markdown(
-    f"<div style='background:{_bg};border-left:5px solid {_fg};padding:9px 14px;"
-    f"border-radius:4px;font-size:0.93em;line-height:1.65;margin:2px 0 4px'>{_msg}</div>",
-    unsafe_allow_html=True,
-)
-
 if frac == 0.0 or target > mw_max:
     mt = min_tfe_for_target(pr, dpsi, ec, na, target)
     if mt is not None:
@@ -355,6 +326,38 @@ with tab1:
         f"<span style='font-weight:700'>○ 처방점</span> = 허용 D_it 상한 [×10¹² cm⁻²eV⁻¹]"
         f" <br> 색 = MW_loss (5%마다, ≥50% 노랑)"
         f"</div>",
+        unsafe_allow_html=True,
+    )
+
+    # ── 어느 기준이 구속인가 (이 도구의 하이라이트) ────────────────────────
+    #   기준이 둘이고 둘 다 만족해야 한다: 상대(MW_loss ≤ loss_max) · 절대(MW ≥ target).
+    #   먼저 걸리는 쪽이 구속. 목표가 낮으면 상대가, 올리면 절대가 구속으로 바뀐다.
+    #   ★"상대 기준이 항상 먼저 걸린다"는 t_FE·E_c를 고정한 이 지도에서만 참이다 —
+    #     앱은 슬라이더로 그걸 실제로 뒤집어 보일 수 있다.
+    #   위치: 지도 바로 아래(범례 다음). 두 기준선이 그림에 그려진 직후라야
+    #   "그 둘 중 어느 쪽이 지금 걸리는가"가 그림을 보며 읽힌다.
+    _bind = binding_of(trows)
+    _sw = binding_switch_target(t_fe, pr, dpsi, ec, na, loss_max)
+    _swtxt = f" 이 스택에서는 목표 <b>{_sw:.2f} V</b>부터 절대 기준으로 넘어감." if _sw else ""
+    if _bind == "relative":
+        _msg = (f"<b style='color:#d1341f'>지금은 빨강(상대) 기준이 구속</b> — 손실 허용치"
+                f"(MW_loss ≤ {loss_max:.0f} %)가 먼저 걸림. "
+                f"이 구간에서는 <b>목표 MW를 올려도 허용 D_it 상한이 변하지 않음</b>"
+                f"(고장 아님)." + _swtxt)
+        _fg, _bg = "#d1341f", "#fdf0ed"
+    elif _bind == "absolute":
+        _msg = (f"<b>지금은 검정(절대) 기준이 구속</b> — 목표 MW ≥ {target:.2f} V가 먼저 "
+                f"걸림. 여기서부터는 목표를 올릴수록 허용 D_it 상한이 급격히 좁아짐."
+                + _swtxt)
+        _fg, _bg = "#111111", "#f1f2f4"
+    else:
+        _msg = (f"<b style='color:#a06a00'>도달 불가</b> — 이 스택은 D_it를 아무리 낮춰도 "
+                f"목표 MW {target:.2f} V에 못 미침. 허용 상한이 존재하지 않으므로 아래 "
+                f"처방표에 '—'로 표시됨." + _swtxt)
+        _fg, _bg = "#a06a00", "#fdf7e8"
+    st.markdown(
+        f"<div style='background:{_bg};border-left:5px solid {_fg};padding:9px 14px;"
+        f"border-radius:4px;font-size:0.93em;line-height:1.65;margin:8px 0 4px'>{_msg}</div>",
         unsafe_allow_html=True,
     )
     st.divider()
