@@ -15,8 +15,14 @@ import numpy as np
 import matplotlib
 matplotlib.use("Agg")
 matplotlib.rcParams["axes.formatter.use_mathtext"] = False
-import matplotlib.pyplot as plt
 import matplotlib.patheffects as pe
+# ★그림은 pyplot 이 아니라 Figure 로 직접 만든다. plt.figure()/plt.subplots() 는 전역
+#   레지스트리에 그림을 등록해 두는데, Streamlit 은 매 실행마다 그림을 새로 만들므로
+#   슬라이더를 몇 번만 움직여도 그림이 쌓인다(실측: matplotlib 의 "More than 20 figures"
+#   경고). 서버에서 렌더만 할 때는 Figure 를 직접 쓰는 것이 공식 권장 방식이고, 전역
+#   상태가 없어져 스레드 반복 실행에서 생기는 문제(이 파일 위쪽 mathtext 주석 참조)의
+#   여지도 줄어든다.
+from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 from matplotlib.ticker import FuncFormatter, NullFormatter, LogLocator
@@ -85,7 +91,7 @@ def plot_designmap(m, target_mw, mw_loss_max, frac, presc, mw_ref):
     Z = np.clip(m["MW_loss"], 10.0, None)  # <10은 최하위 색으로(흰 구멍 방지 → 바닥 10 고정)
 
     # 고정 레이아웃(라벨 길이에 따라 그림이 흔들리지 않도록 add_axes 로 위치 고정)
-    fig = plt.figure(figsize=(8.0, 4.9))
+    fig = Figure(figsize=(8.0, 4.9))
     ax = fig.add_axes([0.095, 0.155, 0.66, 0.80])
     cax = fig.add_axes([0.875, 0.155, 0.028, 0.80])
 
@@ -162,7 +168,8 @@ def _clean(vals):
 
 def plot_prescription(til, dit_nom, dit_lo, dit_hi, mw_loss_max, target_mw, show_band):
     """각 t_IL의 허용 D_it 상한 곡선 (+ Δψ_w 밴드). dit_lo=Δψ_w 1.0(높음), dit_hi=Δψ_w 2.0(낮음)."""
-    fig, ax = plt.subplots(figsize=(6.2, 4.5))
+    fig = Figure(figsize=(6.2, 4.5))
+    ax = fig.subplots()
     til = np.asarray(til, float)
     y = _clean(dit_nom)
     if show_band and dit_lo is not None and dit_hi is not None:
@@ -209,7 +216,7 @@ def plot_sensitivity(curves, target_mw):
                "어느 변수를 얼마나 키워야 목표에 닿나"가 바로 읽힌다. 색은 design map의
                절대기준선과 같은 **검정 파선**으로 통일(빨강은 t_IL 곡선 색과 충돌).
     """
-    fig = plt.figure(figsize=(6.9, 4.3))
+    fig = Figure(figsize=(6.9, 4.3))
     ax = fig.add_axes([0.125, 0.170, 0.790, 0.795])
 
     # 라벨은 곡선·목표선 위를 지날 수밖에 없다(목표가 슬라이더라 위치가 계속 바뀜)
