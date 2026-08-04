@@ -102,9 +102,23 @@ else:
 #   없다 → 값을 session_state 에서 미리 읽고, 위젯은 나중에 같은 key 로 그린다.
 #   (첫 실행은 setdefault 값, 이후 실행은 사용자가 움직인 값이 스크립트 시작 시점에
 #    이미 session_state 에 들어와 있으므로 순서가 어긋나지 않는다.)
-st.session_state.setdefault("loss_max", 30)
-st.session_state.setdefault("tgt_direct", 1.00)
-st.session_state.setdefault("dv_level", 1.0)
+#   ★모드를 바꾸면 반대쪽 슬라이더가 그려지지 않는데, 이때 Streamlit 은 그 key 를
+#     **지우는 게 아니라 기본값으로 되돌려 놓는다**(실측). 그래서 "key 가 있으면
+#     최신값"이라고 믿고 보관값을 갱신하면 되돌려진 기본값이 좋은 값을 덮어쓴다.
+#     → 이번 실행에서 **실제로 그려지는** 위젯만 보관값을 갱신하고, 안 그려지는 쪽과
+#       방금 모드가 바뀌어 되살아나는 쪽은 보관값으로 덮어쓴다.
+_prev_mode = st.session_state.get("_prev_mode")
+_switched = _prev_mode != tgt_mode
+st.session_state["_prev_mode"] = tgt_mode
+_mlc = tgt_mode == "MLC로 계산"
+for _wk, _sk, _default, _live in (("loss_max", "_keep_loss", 30, True),
+                                  ("dv_level", "_keep_dv", 1.0, _mlc),
+                                  ("tgt_direct", "_keep_tgt", 1.00, not _mlc)):
+    st.session_state.setdefault(_sk, _default)
+    if _live and not _switched:      # 계속 그려지던 위젯 → 사용자가 움직인 값이 최신
+        st.session_state[_sk] = st.session_state.get(_wk, st.session_state[_sk])
+    else:                            # 안 그려졌거나 방금 되살아남 → 보관값이 최신
+        st.session_state[_wk] = st.session_state[_sk]
 loss_max = float(st.session_state["loss_max"])
 if tgt_mode == "MLC로 계산":
     dv = float(st.session_state["dv_level"])
