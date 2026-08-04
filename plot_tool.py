@@ -132,7 +132,9 @@ def plot_designmap(m, target_mw, mw_loss_max, frac, presc, mw_ref):
         ax.annotate(f"{d/1e12:.1f}", xy=(d, til), xytext=(xoff, dy),
                     textcoords="offset points", ha=ha, va="center",
                     fontsize=12, fontweight="bold", color="white",
-                    bbox=dict(boxstyle="round,pad=0.28", fc=RED, ec="white", lw=0.8),
+                    # 검은 배경 + 흰 글씨. 흰 테두리를 남겨 어두운 색띠(보라·남색) 위에서도
+                    # 상자 경계가 보이게 한다.
+                    bbox=dict(boxstyle="round,pad=0.28", fc="black", ec="white", lw=1.0),
                     zorder=7)
 
     ax.set_xscale("log")

@@ -332,6 +332,38 @@ with tab1:
     st.subheader("Design window 지도")
     st.pyplot(plot_tool.plot_designmap(m, target, loss_max, frac, presc, r0["MW_ref"]),
               use_container_width=True)
+    # ── 두 기준 슬라이더 — 지도 바로 아래 ──────────────────────────────────
+    #   지도를 보고 → 곧바로 손잡이를 움직이고 → 그 아래 범례·구속 안내에서 결과를
+    #   읽는 순서. 그림과 손잡이 사이에 설명글이 끼면 조작할 때마다 눈이 건너뛰어야 한다.
+    #   값 자체는 스크립트 맨 위에서 session_state 로 이미 읽었다(위 주석 참조).
+    cc1, cc2 = st.columns(2)
+    cc1.markdown('<span class="anch-loss"></span>', unsafe_allow_html=True)
+    cc1.slider(
+        "🔴 손실 허용치 MW_loss_max [%]", min_value=10, max_value=50, step=5,
+        key="loss_max",
+        help="이상적 기준선(MW_ref) 대비 MW가 얼마나 줄어드는 것까지 허용할지(상대 기준). "
+             "예: 30%면 'MW가 기준선의 70% 이상이면 합격'. "
+             "★30 %는 업계 표준이 아니라 이 도구가 쓰는 예시 기준임 — 슬라이더로 바꿔 볼 것.")
+    # ⚫ + anch-dv: 목표 MW는 **절대 기준**이므로 지도의 검정 파선과 같은 표기로 묶는다.
+    #   (🔴/anch-loss = 상대 기준 = 지도의 빨간 실선. 이모지는 장식이 아니라 그림의
+    #    어느 선에 대응하는지를 가리키는 표시다.)
+    cc2.markdown('<span class="anch-dv"></span>', unsafe_allow_html=True)
+    if tgt_mode == "MLC로 계산":
+        cc2.slider(
+            "⚫ 레벨당 마진 ΔV_level [V]", min_value=0.5, max_value=1.5, step=0.1,
+            key="dv_level",
+            help="인접한 두 저장 레벨 사이에 확보해야 할 최소 문턱전압 간격(읽기 여유)임. "
+                 "클수록 안전하지만 요구되는 MW가 커짐.")
+        cc2.caption(f"→ 목표 MW = (N−1)×ΔV_level = **{target:.2f} V** (절대 기준)")
+    else:
+        cc2.slider(
+            "⚫ 목표 MW [V]", min_value=0.80, max_value=2.00, step=0.05,
+            key="tgt_direct",
+            help="이 소자가 만족해야 할 memory window(절대 기준). "
+                 "★0.8–1.4 V 구간은 답이 전혀 안 변함 — 그 구간에선 손실 허용치(상대 기준)가 "
+                 "먼저 걸리기 때문이며 고장이 아님. 1.5 V부터 절대 기준으로 바통이 넘어가고, "
+                 "기본 스택(t_FE 10 nm)에서는 1.8 V 위가 도달 불가임.")
+
     # ── 범례(MW_loss·MW·allowable D_it)를 그림 아래에 표기 (동적) ──
     mw_rel = r0["MW_ref"] * (1.0 - loss_max / 100.0)
     loss_abs = (r0["MW_ref"] - target) / r0["MW_ref"] * 100.0
@@ -372,39 +404,6 @@ with tab1:
         f"</div>",
         unsafe_allow_html=True,
     )
-
-    # ── 두 기준 슬라이더 — 범례 바로 아래, 구속 안내 바로 위 ────────────────
-    #   범례가 "빨간 선 = 상대 기준 / 검은 파선 = 절대 기준"을 방금 설명했고, 바로
-    #   아래 안내가 "그중 어느 쪽이 지금 걸리는가"를 말한다. 그 둘을 조절하는 손잡이가
-    #   사이에 있어야 [선이 뭔지 → 값을 바꿈 → 어느 쪽이 걸리는지]가 한 흐름으로 읽힌다.
-    #   값 자체는 스크립트 맨 위에서 session_state 로 이미 읽었다(위 주석 참조).
-    cc1, cc2 = st.columns(2)
-    cc1.markdown('<span class="anch-loss"></span>', unsafe_allow_html=True)
-    cc1.slider(
-        "🔴 손실 허용치 MW_loss_max [%]", min_value=10, max_value=50, step=5,
-        key="loss_max",
-        help="이상적 기준선(MW_ref) 대비 MW가 얼마나 줄어드는 것까지 허용할지(상대 기준). "
-             "예: 30%면 'MW가 기준선의 70% 이상이면 합격'. "
-             "★30 %는 업계 표준이 아니라 이 도구가 쓰는 예시 기준임 — 슬라이더로 바꿔 볼 것.")
-    # ⚫ + anch-dv: 목표 MW는 **절대 기준**이므로 지도의 검정 파선과 같은 표기로 묶는다.
-    #   (🔴/anch-loss = 상대 기준 = 지도의 빨간 실선. 이모지는 장식이 아니라 그림의
-    #    어느 선에 대응하는지를 가리키는 표시다.)
-    cc2.markdown('<span class="anch-dv"></span>', unsafe_allow_html=True)
-    if tgt_mode == "MLC로 계산":
-        cc2.slider(
-            "⚫ 레벨당 마진 ΔV_level [V]", min_value=0.5, max_value=1.5, step=0.1,
-            key="dv_level",
-            help="인접한 두 저장 레벨 사이에 확보해야 할 최소 문턱전압 간격(읽기 여유)임. "
-                 "클수록 안전하지만 요구되는 MW가 커짐.")
-        cc2.caption(f"→ 목표 MW = (N−1)×ΔV_level = **{target:.2f} V** (절대 기준)")
-    else:
-        cc2.slider(
-            "⚫ 목표 MW [V]", min_value=0.80, max_value=2.00, step=0.05,
-            key="tgt_direct",
-            help="이 소자가 만족해야 할 memory window(절대 기준). "
-                 "★0.8–1.4 V 구간은 답이 전혀 안 변함 — 그 구간에선 손실 허용치(상대 기준)가 "
-                 "먼저 걸리기 때문이며 고장이 아님. 1.5 V부터 절대 기준으로 바통이 넘어가고, "
-                 "기본 스택(t_FE 10 nm)에서는 1.8 V 위가 도달 불가임.")
 
     # ── 어느 기준이 구속인가 (이 도구의 하이라이트) ────────────────────────
     #   기준이 둘이고 둘 다 만족해야 한다: 상대(MW_loss ≤ loss_max) · 절대(MW ≥ target).
