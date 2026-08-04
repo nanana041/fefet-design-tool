@@ -74,53 +74,46 @@ with st.container(border=True):
              "MW가 커지지만 점점 포화함. 포화분극 P_s는 자동으로 P_r의 1.3배로 잡히고, "
              "P_r=15에선 논문 기준값 P_s=20으로 고정됨. (기준 15)")
 
-    tgt_mode = st.segmented_control(
-        "목표 설정 방식", ["직접 입력", "MLC로 계산"], default="직접 입력",
-        help="직접 입력 = 목표 MW를 슬라이더로 바로 지정(0.8–2.0 V). "
-             "MLC로 계산 = 저장 레벨 수와 레벨당 마진에서 유도 → 목표 MW = (N−1)×ΔV_level. "
-             "두 모드 모두 같은 '목표 MW' 하나로 합류하므로 계산 경로는 동일함.")
-    tgt_mode = tgt_mode or "직접 입력"
-
-    s1, s2 = st.columns(2)
-    s1.markdown('<span class="anch-loss"></span>', unsafe_allow_html=True)
-    loss_max = float(s1.slider(
-        "🔴 손실 허용치 MW_loss_max [%]", 10, 50, 30, 5,
-        help="이상적 기준선(MW_ref) 대비 MW가 얼마나 줄어드는 것까지 허용할지(상대 기준). "
-             "예: 30%면 'MW가 기준선의 70% 이상이면 합격'. "
-             "★30 %는 업계 표준이 아니라 이 도구가 쓰는 예시 기준임 — 슬라이더로 바꿔 볼 것."))
-
-    if tgt_mode == "MLC로 계산":
-        n_lv = s2.segmented_control(
-            "레벨 수 N", [2, 3, 4], default=3, format_func=lambda n: f"{n}단계",
-            help="한 셀에 저장하는 단계 수임. N단계를 구분하려면 창(MW)이 (N−1)×레벨마진 "
-                 "이상 필요 → 목표 MW = (N−1)·ΔV_level. (예: 3단계·마진 1.0V → 목표 2.0 V)")
-        n_lv = n_lv or 3
-        s2.markdown('<span class="anch-dv"></span>', unsafe_allow_html=True)
-        dv = s2.slider(
-            "⚫ 레벨당 마진 ΔV_level [V]", 0.5, 1.5, 1.0, 0.1,
-            help="인접한 두 저장 레벨 사이에 확보해야 할 최소 문턱전압 간격(읽기 여유)임. "
-                 "클수록 안전하지만 요구되는 MW가 커짐.")
-        # ★수치 계약(tests/test_tool_contract.py): target_MW = (N−1)·ΔV_level.
-        #   직접 입력 모드를 더해도 두 모드가 이 한 변수로 합류하므로 관계는 그대로 성립한다.
-        target = round((n_lv - 1) * dv, 3)
-        s2.caption(f"→ 목표 MW = (N−1)×ΔV_level = **{target:.2f} V** (절대 기준)")
-    else:
-        n_lv, dv = 2, None
-        # ⚫ + anch-dv: 목표 MW는 **절대 기준**이므로 지도의 검정 파선과 같은 표기로 묶는다.
-        #   (🔴/anch-loss = 상대 기준 = 지도의 빨간 실선. 이모지는 장식이 아니라 그림의
-        #    어느 선에 대응하는지를 가리키는 표시다.)
-        s2.markdown('<span class="anch-dv"></span>', unsafe_allow_html=True)
-        target = float(s2.slider(
-            "⚫ 목표 MW [V]", 0.80, 2.00, 1.00, 0.05,
-            help="이 소자가 만족해야 할 memory window(절대 기준). "
-                 "★0.8–1.4 V 구간은 답이 전혀 안 변함 — 그 구간에선 손실 허용치(상대 기준)가 "
-                 "먼저 걸리기 때문이며 고장이 아님. 1.5 V부터 절대 기준으로 바통이 넘어가고, "
-                 "기본 스택(t_FE 10 nm)에서는 1.8 V 위가 도달 불가임."))
-
-# ─────────────────────────── 사이드바 (가끔 바꾸는 값) ───────────────────────────
+# ─────────────────────────── 사이드바 ───────────────────────────
 sb = st.sidebar
-sb.caption("자주 쓰는 값(t_FE · P_r · 손실 허용치 · 목표 MW)은 **본문 맨 위**에 있음. "
-           "여기는 어쩌다 한 번 바꾸는 것만 둠.")
+sb.caption("설계 노브(t_FE · P_r)는 **본문 맨 위**, 두 기준(손실 허용치 · 목표 MW)은 "
+           "**지도 바로 아래**에 있음. 여기는 저장 방식과 어쩌다 한 번 바꾸는 값만 둠.")
+
+sb.markdown("### 🎯 스펙 / 목표")
+tgt_mode = sb.segmented_control(
+    "목표 설정 방식", ["직접 입력", "MLC로 계산"], default="직접 입력",
+    help="직접 입력 = 목표 MW를 슬라이더로 바로 지정(0.8–2.0 V). "
+         "MLC로 계산 = 저장 레벨 수와 레벨당 마진에서 유도 → 목표 MW = (N−1)×ΔV_level. "
+         "두 모드 모두 같은 '목표 MW' 하나로 합류하므로 계산 경로는 동일함.")
+tgt_mode = tgt_mode or "직접 입력"
+if tgt_mode == "MLC로 계산":
+    n_lv = sb.segmented_control(
+        "레벨 수 N", [2, 3, 4], default=3, format_func=lambda n: f"{n}단계",
+        help="한 셀에 저장하는 단계 수임. N단계를 구분하려면 창(MW)이 (N−1)×레벨마진 "
+             "이상 필요 → 목표 MW = (N−1)·ΔV_level. (예: 3단계·마진 1.0V → 목표 2.0 V)")
+    n_lv = n_lv or 3
+    sb.caption("레벨당 마진 ΔV_level 은 **지도 아래**에 있음")
+else:
+    n_lv = 2
+    sb.caption("목표 MW 슬라이더는 **지도 아래**에 있음")
+
+# ★두 기준 위젯은 지도 아래(범례와 구속 안내 사이)에 그리지만, 그 값은 지도·통과율을
+#   계산할 때 이미 필요하다. Streamlit은 위에서 아래로 실행되므로 위젯을 먼저 만들 수
+#   없다 → 값을 session_state 에서 미리 읽고, 위젯은 나중에 같은 key 로 그린다.
+#   (첫 실행은 setdefault 값, 이후 실행은 사용자가 움직인 값이 스크립트 시작 시점에
+#    이미 session_state 에 들어와 있으므로 순서가 어긋나지 않는다.)
+st.session_state.setdefault("loss_max", 30)
+st.session_state.setdefault("tgt_direct", 1.00)
+st.session_state.setdefault("dv_level", 1.0)
+loss_max = float(st.session_state["loss_max"])
+if tgt_mode == "MLC로 계산":
+    dv = float(st.session_state["dv_level"])
+    # ★수치 계약(tests/test_tool_contract.py): target_MW = (N−1)·ΔV_level.
+    #   직접 입력 모드를 더해도 두 모드가 이 한 변수로 합류하므로 관계는 그대로 성립한다.
+    target = round((n_lv - 1) * dv, 3)
+else:
+    dv = None
+    target = float(st.session_state["tgt_direct"])
 # ── 처음 쓰는 사람을 위한 값 설명 (펼쳐보기) ──
 with sb.expander("ℹ️ 각 값이 무슨 뜻인가요?  (처음이면 눌러서 펼쳐보기)"):
     st.markdown(
@@ -365,6 +358,39 @@ with tab1:
         f"</div>",
         unsafe_allow_html=True,
     )
+
+    # ── 두 기준 슬라이더 — 범례 바로 아래, 구속 안내 바로 위 ────────────────
+    #   범례가 "빨간 선 = 상대 기준 / 검은 파선 = 절대 기준"을 방금 설명했고, 바로
+    #   아래 안내가 "그중 어느 쪽이 지금 걸리는가"를 말한다. 그 둘을 조절하는 손잡이가
+    #   사이에 있어야 [선이 뭔지 → 값을 바꿈 → 어느 쪽이 걸리는지]가 한 흐름으로 읽힌다.
+    #   값 자체는 스크립트 맨 위에서 session_state 로 이미 읽었다(위 주석 참조).
+    cc1, cc2 = st.columns(2)
+    cc1.markdown('<span class="anch-loss"></span>', unsafe_allow_html=True)
+    cc1.slider(
+        "🔴 손실 허용치 MW_loss_max [%]", min_value=10, max_value=50, step=5,
+        key="loss_max",
+        help="이상적 기준선(MW_ref) 대비 MW가 얼마나 줄어드는 것까지 허용할지(상대 기준). "
+             "예: 30%면 'MW가 기준선의 70% 이상이면 합격'. "
+             "★30 %는 업계 표준이 아니라 이 도구가 쓰는 예시 기준임 — 슬라이더로 바꿔 볼 것.")
+    # ⚫ + anch-dv: 목표 MW는 **절대 기준**이므로 지도의 검정 파선과 같은 표기로 묶는다.
+    #   (🔴/anch-loss = 상대 기준 = 지도의 빨간 실선. 이모지는 장식이 아니라 그림의
+    #    어느 선에 대응하는지를 가리키는 표시다.)
+    cc2.markdown('<span class="anch-dv"></span>', unsafe_allow_html=True)
+    if tgt_mode == "MLC로 계산":
+        cc2.slider(
+            "⚫ 레벨당 마진 ΔV_level [V]", min_value=0.5, max_value=1.5, step=0.1,
+            key="dv_level",
+            help="인접한 두 저장 레벨 사이에 확보해야 할 최소 문턱전압 간격(읽기 여유)임. "
+                 "클수록 안전하지만 요구되는 MW가 커짐.")
+        cc2.caption(f"→ 목표 MW = (N−1)×ΔV_level = **{target:.2f} V** (절대 기준)")
+    else:
+        cc2.slider(
+            "⚫ 목표 MW [V]", min_value=0.80, max_value=2.00, step=0.05,
+            key="tgt_direct",
+            help="이 소자가 만족해야 할 memory window(절대 기준). "
+                 "★0.8–1.4 V 구간은 답이 전혀 안 변함 — 그 구간에선 손실 허용치(상대 기준)가 "
+                 "먼저 걸리기 때문이며 고장이 아님. 1.5 V부터 절대 기준으로 바통이 넘어가고, "
+                 "기본 스택(t_FE 10 nm)에서는 1.8 V 위가 도달 불가임.")
 
     # ── 어느 기준이 구속인가 (이 도구의 하이라이트) ────────────────────────
     #   기준이 둘이고 둘 다 만족해야 한다: 상대(MW_loss ≤ loss_max) · 절대(MW ≥ target).
