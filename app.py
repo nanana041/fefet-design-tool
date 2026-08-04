@@ -93,32 +93,44 @@ with sb.expander("고급 (기본 고정 권장)"):
 
 sb.markdown("### 🎯 스펙 / 목표")
 sb.caption("우리가 *요구하는* 성능 — 목표를 정하면 허용 범위를 답해줌")
-mode = sb.segmented_control(
-    "저장 방식", ["binary", "MLC"], default="binary",
-    help="binary = 한 셀에 2단계(1비트) 저장. MLC = 여러 단계(다중비트) 저장 → 더 큰 MW가 필요함.")
-mode = mode or "binary"
-if mode == "MLC":
+tgt_mode = sb.segmented_control(
+    "목표 설정 방식", ["직접 입력", "MLC로 계산"], default="직접 입력",
+    help="직접 입력 = 목표 MW를 슬라이더로 바로 지정(0.8–2.0 V). "
+         "MLC로 계산 = 저장 레벨 수와 레벨당 마진에서 유도 → 목표 MW = (N−1)×ΔV_level. "
+         "두 모드 모두 같은 '목표 MW' 하나로 합류하므로 계산 경로는 동일함.")
+tgt_mode = tgt_mode or "직접 입력"
+
+sb.markdown('<span class="anch-loss"></span>', unsafe_allow_html=True)
+loss_max = float(sb.slider(
+    "🔴 손실 허용치 MW_loss_max [%]", 10, 50, 30, 5,
+    help="이상적 기준선(MW_ref) 대비 MW가 얼마나 줄어드는 것까지 허용할지(상대 기준). "
+         "예: 30%면 'MW가 기준선의 70% 이상이면 합격'. "
+         "★30 %는 업계 표준이 아니라 이 도구가 쓰는 예시 기준임 — 슬라이더로 바꿔 볼 것."))
+
+if tgt_mode == "MLC로 계산":
     n_lv = sb.segmented_control(
         "레벨 수 N", [2, 3, 4], default=3, format_func=lambda n: f"{n}단계",
         help="한 셀에 저장하는 단계 수임. N단계를 구분하려면 창(MW)이 (N−1)×레벨마진 "
              "이상 필요 → 목표 MW = (N−1)·ΔV_level. (예: 3단계·마진 1.0V → 목표 2.0 V)")
     n_lv = n_lv or 3
+    sb.markdown('<span class="anch-dv"></span>', unsafe_allow_html=True)
+    dv = sb.slider(
+        "⚫ 레벨당 마진 ΔV_level [V]", 0.5, 1.5, 1.0, 0.1,
+        help="인접한 두 저장 레벨 사이에 확보해야 할 최소 문턱전압 간격(읽기 여유)임. "
+             "클수록 안전하지만 요구되는 MW가 커짐.")
+    # ★수치 계약(tests/test_tool_contract.py): target_MW = (N−1)·ΔV_level.
+    #   직접 입력 모드를 더해도 두 모드가 이 한 변수로 합류하므로 관계는 그대로 성립한다.
+    target = round((n_lv - 1) * dv, 3)
+    sb.metric("→ 목표 MW (절대 기준)", f"{target:.2f} V",
+              help="실제로 만족해야 하는 절대 기준값임. = (N−1)×ΔV_level.")
 else:
-    n_lv = 2
-sb.markdown('<span class="anch-loss"></span>', unsafe_allow_html=True)
-loss_max = float(sb.slider(
-    "🔴 손실 허용치 MW_loss_max [%]", 10, 50, 30, 5,
-    help="이상적 기준선(MW_ref) 대비 MW가 얼마나 줄어드는 것까지 허용할지(상대 기준). "
-         "예: 30%면 'MW가 기준선의 70% 이상이면 합격'. 논문 기본값 30%."))
-sb.markdown('<span class="anch-dv"></span>', unsafe_allow_html=True)
-dv = sb.slider(
-    "⚫ 레벨당 마진 ΔV_level [V]", 0.5, 1.5, 1.0, 0.1,
-    help="인접한 두 저장 레벨 사이에 확보해야 할 최소 문턱전압 간격(읽기 여유)임. "
-         "클수록 안전하지만 요구되는 MW가 커짐.")
-target = round((n_lv - 1) * dv, 3)
-sb.metric("→ 목표 MW (절대 기준)", f"{target:.2f} V",
-          help="실제로 만족해야 하는 절대 기준값임. = (N−1)×ΔV_level. "
-               "binary(N=2)이면 ΔV_level과 같음.")
+    n_lv, dv = 2, None
+    target = float(sb.slider(
+        "🎯 목표 MW [V]", 0.80, 2.00, 1.00, 0.05,
+        help="이 소자가 만족해야 할 memory window(절대 기준). "
+             "★0.8–1.4 V 구간은 답이 전혀 안 변함 — 그 구간에선 손실 허용치(상대 기준)가 "
+             "먼저 걸리기 때문이며 고장이 아님. 1.5 V부터 절대 기준으로 바통이 넘어가고, "
+             "기본 스택(t_FE 10 nm)에서는 1.8 V 위가 도달 불가임."))
 
 sb.markdown("### 📉 불확실성")
 sb.caption("실험으로 아직 값을 못 정한 항목 — 하나로 안 정하고, 가능한 범위(1.0~2.0V)를 그래프에 띠로 함께 표시함")
@@ -182,12 +194,81 @@ def min_tfe_for_target(pr, dpsi, ec, na, target):
     return None
 
 
+# ★배율 축의 ×1 = 표 1(논문) 기준값 — **고정**. 현재 슬라이더 값으로 정규화하면 축의
+#   의미가 매번 바뀌어 논문 수치(MW 1.787 / 80.6 %)와 대조가 안 된다.
+#   "지금 내가 어디 있나"는 곡선 위 현재 설계점 마커가 대신한다.
+REF_TFE, REF_PR, REF_TIL = 10.0, 15.0, 1.0
+DIT_CMP_OPTS = [1e11, 5e11, 1e12, 5e12, 1e13]   # 민감도 그림의 비교용 D_it
+_SUP = str.maketrans("0123456789", "⁰¹²³⁴⁵⁶⁷⁸⁹")
+
+
+def _dit_label(d):
+    """1e11 → '1×10¹¹' (mathtext 금지 규약이라 유니코드 위첨자로)."""
+    e = int(np.floor(np.log10(d)))
+    return f"{d / 10 ** e:.0f}×10{str(e).translate(_SUP)}"
+
+
+@st.cache_data(show_spinner=False)
+def compute_sensitivity(t_fe, pr, dpsi, ec, na, dit_cmp):
+    """포스터 v4 그림3(정규화 민감도)과 같은 4곡선.
+
+    ★P_r sweep은 P_s > P_r 유지를 위해 sweeps.PS_RATIO(=1.3)로 P_s도 같이 올린다.
+      그래서 배율 1.0에서 P_s = 1.3·P_r 이 되어, P_s를 20으로 고정한 기준점과 몇 mV
+      어긋난다(P_r=15 기준 1.7907 vs 1.7870 = 3.7 mV). 눈으로는 안 보이지만 검산하면
+      드러나므로 캡션에 규약을 적어 둔다.
+    ★보라 곡선의 D_it는 포스터처럼 5e12 하드코딩이 아니라 인자로 받는다 — 앱에서는
+      이 값을 올려 보며 t_IL 곡선이 갈라지는 것을 눈으로 볼 수 있어야 한다."""
+    base = _base(t_fe, pr, dpsi, ec, na)
+    tfe = np.linspace(5, 20, 31)
+    prv = np.linspace(5, 25, 31)
+    til = np.linspace(0.5, 2.0, 25)
+    return dict(
+        tfe=(tfe, sweep_1d("t_FE", list(tfe), base)["MW"]),
+        pr=(prv, sweep_1d("Pr", list(prv), base)["MW"]),
+        til=(til, sweep_1d("t_IL", list(til), base)["MW"]),
+        til_hi=(til, sweep_1d("t_IL", list(til), {**base, "Dit": dit_cmp})["MW"]),
+    )
+
+
+@st.cache_data(show_spinner=False)
+def compute_tab_map(t_fe, pr, dpsi, ec, na):
+    """처방표·구속 판정용 고해상도 격자(대표 t_IL 4개)."""
+    base = _base(t_fe, pr, dpsi, ec, na)
+    return sweep_2d("Dit", np.logspace(11, 13, 200), "t_IL",
+                    np.array([0.5, 1.0, 1.5, 2.0]), base)
+
+
 @st.cache_data(show_spinner=False)
 def table_bounds(t_fe, pr, dpsi, ec, na, loss_max, target):
-    base = _base(t_fe, pr, dpsi, ec, na)
-    m = sweep_2d("Dit", np.logspace(11, 13, 200), "t_IL",
-                 np.array([0.5, 1.0, 1.5, 2.0]), base)
-    return dit_upper_bounds(m, loss_max, target)
+    return dit_upper_bounds(compute_tab_map(t_fe, pr, dpsi, ec, na), loss_max, target)
+
+
+def binding_of(rows):
+    """지금 목표에서 어느 기준이 구속(binding)인지 — "relative"/"absolute"/"unreachable".
+
+    ★동률(dit_rel == dit_abs)은 상대로 센다. 계약 test_binding_criterion_switches_at_1_5V
+      가 '1.4 V까지는 상대'로 고정한 지점이 정확히 rel == abs 인 자리이기 때문."""
+    live = [r for r in rows if r["dit_max"] is not None]
+    if not live:
+        return "unreachable"
+    rel = sum(1 for r in live
+              if r["dit_abs"] is None
+              or (r["dit_rel"] is not None and r["dit_rel"] <= r["dit_abs"] * (1 + 1e-9)))
+    return "relative" if rel * 2 >= len(live) else "absolute"
+
+
+@st.cache_data(show_spinner=False)
+def binding_switch_target(t_fe, pr, dpsi, ec, na, loss_max):
+    """구속 기준이 상대 → 절대로 넘어가는 목표 MW [V]. 전환이 없으면 None.
+    (기본 스택·손실 30 %에서는 1.5 V — 이 앱의 하이라이트가 되는 지점)"""
+    m = compute_tab_map(t_fe, pr, dpsi, ec, na)
+    prev = None
+    for t in np.arange(0.5, 3.001, 0.05):
+        b = binding_of(dit_upper_bounds(m, loss_max, float(t)))
+        if prev == "relative" and b != "relative":
+            return round(float(t), 2)
+        prev = b
+    return None
 
 
 m = compute_map(t_fe, pr, dpsi, ec, na, n_dit, n_til)
@@ -207,6 +288,35 @@ if target <= mw_max:
 else:
     c3.metric("목표 달성", "불가 ⚠️", f"최대 MW {mw_max:.2f} V",
               delta_color="inverse")
+
+# ── 어느 기준이 구속인가 (이 도구의 하이라이트) ────────────────────────────
+#   기준이 둘이고 둘 다 만족해야 한다: 상대(MW_loss ≤ loss_max) · 절대(MW ≥ target).
+#   먼저 걸리는 쪽이 구속. 목표가 낮으면 상대가, 올리면 절대가 구속으로 바뀐다.
+#   ★"상대 기준이 항상 먼저 걸린다"는 t_FE·E_c를 고정한 이 지도에서만 참이다 —
+#     앱은 슬라이더로 그걸 실제로 뒤집어 보일 수 있다.
+_bind = binding_of(table_bounds(t_fe, pr, dpsi, ec, na, loss_max, target))
+_sw = binding_switch_target(t_fe, pr, dpsi, ec, na, loss_max)
+_swtxt = f" 이 스택에서는 목표 <b>{_sw:.2f} V</b>부터 절대 기준으로 넘어감." if _sw else ""
+if _bind == "relative":
+    _msg = (f"<b style='color:#d1341f'>지금은 상대 기준이 구속</b> — 손실 허용치"
+            f"(MW_loss ≤ {loss_max:.0f} %)가 먼저 걸림. "
+            f"이 구간에서는 <b>목표 MW를 올려도 허용 D_it 상한이 변하지 않음</b>(고장 아님)."
+            + _swtxt)
+    _fg, _bg = "#d1341f", "#fdf0ed"
+elif _bind == "absolute":
+    _msg = (f"<b>지금은 절대 기준이 구속</b> — 목표 MW ≥ {target:.2f} V가 먼저 걸림. "
+            f"여기서부터는 목표를 올릴수록 허용 D_it 상한이 급격히 좁아짐." + _swtxt)
+    _fg, _bg = "#111111", "#f1f2f4"
+else:
+    _msg = (f"<b style='color:#a06a00'>도달 불가</b> — 이 스택은 D_it를 아무리 낮춰도 "
+            f"목표 MW {target:.2f} V에 못 미침. 허용 상한이 존재하지 않으므로 처방표에 "
+            f"'—'로 표시됨." + _swtxt)
+    _fg, _bg = "#a06a00", "#fdf7e8"
+st.markdown(
+    f"<div style='background:{_bg};border-left:5px solid {_fg};padding:9px 14px;"
+    f"border-radius:4px;font-size:0.93em;line-height:1.65;margin:2px 0 4px'>{_msg}</div>",
+    unsafe_allow_html=True,
+)
 
 if frac == 0.0 or target > mw_max:
     mt = min_tfe_for_target(pr, dpsi, ec, na, target)
@@ -249,7 +359,7 @@ with tab1:
     )
     st.divider()
 
-    colA, colB = st.columns([1.15, 1])
+    colA, colB = st.columns([1, 1.35])
     with colA:
         st.subheader("허용 D_it 상한 처방 곡선")
         dit_nom = [r["dit_max"] for r in rows]
@@ -267,44 +377,102 @@ with tab1:
 
         def _fmt(x):
             if x is None:
-                return "— (전 구간 미달)"
+                return "—"
             if x >= 9.9e12:
-                return "≥ 1×10¹³ (제약 없음)"
-            return f"{x:.2e} cm⁻²eV⁻¹"
+                return "≥ 1×10¹³"
+            return f"{x:.2e}"
+
+        def _neff(x):
+            """유효 트랩전하 N_eff = D_it·Δψ_w/2 [cm⁻²].
+            ★트랩 항은 이 곱으로만 모델에 들어가므로(축퇴) Δψ_w를 바꾸면 허용 D_it
+              상한은 ∝1/Δψ_w 로 움직이지만 이 값은 그대로다 — 그게 '둘을 따로 정할 수
+              없다'는 뜻이고, 실제 앵커 대상은 D_it가 아니라 N_eff다.
+            ★단 상한이 스윕 격자 끝(1e13)에 걸린 칸은 '≥'로 표시해야 한다. 그 칸의
+              진짜 상한은 격자 밖이라 N_eff도 하한값일 뿐인데, 그냥 숫자로 찍으면
+              Δψ_w를 바꿨을 때 그 칸만 값이 달라져서 축퇴가 깨진 것처럼 보인다."""
+            if x is None:
+                return "—"
+            return ("≥ " if x >= 9.9e12 else "") + f"{x * dpsi / 2:.2e}"
 
         tbl = {
             "t_IL [nm]": [f"{r['t_IL']:.1f}" for r in trows],
-            "허용 D_it 상한 (binding)": [_fmt(r["dit_max"]) for r in trows],
+            "허용 D_it 상한 [cm⁻²eV⁻¹]": [_fmt(r["dit_max"]) for r in trows],
+            "→ N_eff 상한 [cm⁻²]": [_neff(r["dit_max"]) for r in trows],
             "상대기준 경계": [_fmt(r["dit_rel"]) for r in trows],
             "절대기준 경계": [_fmt(r["dit_abs"]) for r in trows],
         }
         st.table(tbl)
         st.caption(f"현재 스펙: 목표 MW ≥ {target:.2f} V, 손실 ≤ {loss_max:.0f} %, "
-                   f"Δψ_w = {dpsi:.1f} V, t_FE = {t_fe:.1f} nm, P_r = {pr:.0f} μC/cm².")
+                   f"Δψ_w = {dpsi:.1f} V, t_FE = {t_fe:.1f} nm, P_r = {pr:.0f} μC/cm². "
+                   f"'—' = 그 t_IL에서는 목표 도달 불가(상한 없음).")
+        st.info(
+            "**N_eff = D_it · Δψ_w / 2** — 계면 트랩은 이 **곱으로만** MW를 깎음. "
+            "왼쪽 사이드바의 Δψ_w를 움직여 보면 **허용 D_it 상한은 바뀌는데 N_eff 상한은 "
+            "그대로**임. 두 값을 따로 정하는 것이 원리적으로 불가능하다는 뜻이고(축퇴), "
+            "실험으로 앵커해야 할 대상도 D_it가 아니라 N_eff임. "
+            "(‘≥’가 붙은 칸은 상한이 스윕 격자 끝 1×10¹³을 넘어간 경우라 하한값만 "
+            "표시된 것 — 그 칸만은 Δψ_w에 따라 표시값이 달라짐.)",
+            icon="🔗",
+        )
 
 with tab2:
     st.subheader("1D 민감도 (현재 스펙 기준)")
     st.markdown(
-        "한 번에 한 변수만 바꿨을 때 memory window(MW)가 어떻게 변하는지 봄 "
-        "(나머지 값은 현재 사이드바 설정으로 고정).\n\n"
-        "- 왼쪽 · MW vs t_FE — 강유전체가 두꺼울수록 MW가 거의 선형으로 증가함. "
-        "빨간 점선 = 목표 MW, 회색 점선 = 현재 t_FE. 파란 곡선이 빨간선 위로 올라가는 t_FE부터 목표 도달.\n"
-        "- 오른쪽 · MW vs t_IL — 계면층 두께 단독으로는 MW가 거의 안 변함 "
-        "(세로축 눈금 폭이 매우 좁은 것에 주목).\n\n"
-        "왜 중요한가 — t_FE·P_r는 MW를 직접 키우는 설계 노브, t_IL은 단독 효과가 거의 없는 축임. "
-        "단 t_IL은 트랩 손실(∝ D_it·t_IL)을 통해 D_it와 얽힐 때만 MW를 깎음 → 그래서 허용범위를 "
-        "D_it×t_IL 2D 지도로 보는 것이 근거가 됨. 목표 미달이면 왼쪽 그래프로 "
-        "t_FE를 얼마나 올려야 하는지를 바로 읽을 수 있음."
+        "한 번에 한 변수만 바꿨을 때 memory window(MW)가 어떻게 변하는지 봄. "
+        "가로축은 **각 변수를 논문 표 1의 기준값으로 나눈 배율**임 "
+        "(×1 = t_FE 10 nm · P_r 15 μC/cm² · t_IL 1.0 nm). 축이 하나뿐이라 곡선끼리 "
+        "기울기를 직접 비교할 수 있고, 기준이 고정이라 논문 수치와 언제든 대조됨.\n\n"
+        "- **흰 원** = 지금 사이드바 설정이 각 곡선 위에서 어디인지. 슬라이더를 움직이면 "
+        "곡선을 따라 미끄러짐.\n"
+        "- **검은 파선** = 현재 목표 MW. 곡선이 이 선 위로 올라가는 지점부터 목표 달성임 "
+        "(옆 탭 design map의 절대 기준선과 같은 표기).\n\n"
+        "- **t_FE** — 강유전체가 두꺼울수록 MW가 거의 선형으로 증가함. 목표 미달이면 이 "
+        "곡선으로 t_FE를 얼마나 올려야 하는지 바로 읽힘.\n"
+        "- **P_r** — 잔류분극이 클수록 MW가 커지지만 점점 포화함.\n"
+        "- **t_IL (빨강)** — 계면층 두께 **단독으로는 MW가 거의 안 변함**.\n"
+        "- **t_IL (보라 파선)** — ★같은 t_IL인데 계면 트랩이 많으면 **급격히 깎임**. "
+        "아래 슬라이더로 D_it를 올려 보면 두 t_IL 곡선이 벌어지는 게 보임 — "
+        "t_IL은 혼자서는 무해하고 **D_it와 얽힐 때만** MW를 문다는 뜻.\n\n"
+        "왜 중요한가 — 빨강만 보면 \"t_IL은 중요하지 않다\"로 읽히는데, 옆 탭의 design map은 "
+        "t_IL이 두 축 중 하나임. 보라 파선이 그 모순을 풀어 주고, **허용범위를 D_it×t_IL "
+        "2차원으로 봐야 하는 근거**가 됨."
     )
-    base = _base(t_fe, pr, dpsi, ec, na)
-    s_tfe = sweep_1d("t_FE", list(np.linspace(5, 20, 31)), base)
-    s_til = sweep_1d("t_IL", list(np.linspace(0.5, 2.0, 25)), base)
-    st.pyplot(plot_tool.plot_sensitivity(
-        s_tfe["values"], s_tfe["MW"], s_til["values"], s_til["MW"], target, t_fe))
+    dit_cmp = st.select_slider(
+        "보라 파선의 D_it — 올려 보면 t_IL 곡선이 갈라짐", options=DIT_CMP_OPTS,
+        value=5e12, format_func=_dit_label,
+        help="빨간 t_IL 곡선은 기준 D_it(1×10¹¹)에서의 것임. 이 값을 올리면 같은 t_IL "
+             "구간인데도 MW가 급격히 깎이는 보라 곡선이 갈라져 나옴 → '계면층 두께는 "
+             "혼자서는 무해하고 트랩과 얽힐 때만 문다'가 눈으로 보임. 정적인 포스터 "
+             "그림으로는 못 하는 부분임.")
+    s = compute_sensitivity(t_fe, pr, dpsi, ec, na, float(dit_cmp))
+    _dl = _dit_label(dit_cmp)
+    curves = [
+        dict(name="t_FE", x=s["tfe"][0] / REF_TFE, mw=s["tfe"][1],
+             color=plot_tool.BLUE, ls="-", lo="5", hi="20 nm",
+             cur=(t_fe / REF_TFE, float(np.interp(t_fe, s["tfe"][0], s["tfe"][1])))),
+        dict(name="P_r", x=s["pr"][0] / REF_PR, mw=s["pr"][1],
+             color=plot_tool.TEAL, ls="-", lo="5", hi="25 μC/cm²",
+             cur=(pr / REF_PR, float(np.interp(pr, s["pr"][0], s["pr"][1])))),
+        # t_IL은 사이드바 슬라이더가 아니라 지도의 축이라 1D 기준값 1.0 nm에 고정 → 항상 ×1
+        dict(name="t_IL", x=s["til"][0] / REF_TIL, mw=s["til"][1],
+             color=plot_tool.RED, ls="-", lo="0.5", hi="2 nm",
+             cur=(1.0, float(np.interp(REF_TIL, s["til"][0], s["til"][1])))),
+        # 두 줄로 쪼갬: 한 줄이면 오른쪽 여백을 넘는다 (세로 분리는 plot_tool이 처리)
+        dict(name=f"t_IL\n@ D_it {_dl}", x=s["til_hi"][0] / REF_TIL, mw=s["til_hi"][1],
+             color=plot_tool.PLUM, ls=(0, (5, 3)), lo="0.5", hi="", cur=None),
+    ]
+    st.pyplot(plot_tool.plot_sensitivity(curves, target), use_container_width=False)
+
+    def _pct(y):
+        return 100.0 * (y[-1] - y[0]) / y[0]
+
     st.caption(
-        f"현재 설정(P_r {pr:.0f} μC/cm², Δψ_w {dpsi:.1f} V) 기준으로 "
-        f"t_FE 5→20 nm면 MW가 약 {s_tfe['MW'][0]:.2f}→{s_tfe['MW'][-1]:.2f} V로 변함. "
-        f"t_IL 0.5→2.0 nm 변화는 {100*(s_til['MW'][-1]-s_til['MW'][0])/s_til['MW'][0]:+.1f}% 로 미미함."
+        f"현재 설정(t_FE {t_fe:.1f} nm, P_r {pr:.0f} μC/cm², Δψ_w {dpsi:.1f} V) 기준. "
+        f"t_FE 5→20 nm면 MW {s['tfe'][1][0]:.2f}→{s['tfe'][1][-1]:.2f} V. "
+        f"t_IL 0.5→2.0 nm는 기준 D_it(1×10¹¹)에서 {_pct(s['til'][1]):+.1f} % 로 미미하지만, "
+        f"D_it = {_dl}에서는 {_pct(s['til_hi'][1]):+.1f} % 로 급격함. "
+        "※ P_r 곡선은 P_s > P_r 유지를 위해 P_s = 1.3·P_r 로 함께 올린 결과라, 배율 1.0에서 "
+        "기준점(P_s 고정)과 몇 mV 어긋나는 것이 정상임."
     )
 
 with tab3:
