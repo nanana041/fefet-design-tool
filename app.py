@@ -328,10 +328,15 @@ with tab1:
     trows = table_bounds(t_fe, pr, dpsi, ec, na, loss_max, target)   # 처방(지도 빨간숫자 + 아래 표 공용)
     presc = [{"t_IL": r["t_IL"], "dit_max": r["dit_max"]} for r in trows]
     # ── 헤드라인: Design window 지도 ──
-    #   use_container_width=True: 컨테이너 폭에 맞춰 전체를 스케일(잘림·2배 확대 방지, 크기 일정)
+    #   use_container_width=True: 컨테이너 폭에 맞춰 전체를 스케일(잘림·2배 확대 방지)
+    #   ★bbox_inches=None 필수. st.pyplot 은 기본이 bbox_inches="tight" 라서 그려진
+    #     내용의 경계에 맞춰 그림을 다시 잘라낸다. 그러면 컬러바 눈금·브래킷 글자처럼
+    #     축 밖에 있는 것들의 위치가 값에 따라 달라질 때마다 출력 픽셀 크기가 바뀌고
+    #     (실측: 1550×920 ↔ 1550×930), 화면에서 그림 크기가 들쭉날쭉해진다.
+    #     이 그림은 add_axes 로 좌표를 이미 고정해 뒀으므로 잘라내면 안 된다.
     st.subheader("Design window 지도")
     st.pyplot(plot_tool.plot_designmap(m, target, loss_max, frac, presc, r0["MW_ref"]),
-              use_container_width=True)
+              use_container_width=True, bbox_inches=None)
     # ── 두 기준 슬라이더 — 지도 바로 아래 ──────────────────────────────────
     #   지도를 보고 → 곧바로 손잡이를 움직이고 → 그 아래 범례·구속 안내에서 결과를
     #   읽는 순서. 그림과 손잡이 사이에 설명글이 끼면 조작할 때마다 눈이 건너뛰어야 한다.
@@ -449,7 +454,8 @@ with tab1:
             dit_lo = [r["dit_max"] for r in dit_upper_bounds(m_lo, loss_max, target)]
             dit_hi = [r["dit_max"] for r in dit_upper_bounds(m_hi, loss_max, target)]
         st.pyplot(plot_tool.plot_prescription(m["yvals"], dit_nom, dit_lo, dit_hi,
-                                              loss_max, target, show_band))
+                                              loss_max, target, show_band),
+                  bbox_inches=None)   # ↑와 같은 이유 — 크기 일정하게
         st.caption("각 t_IL에서 두 기준을 만족하는 D_it 최대 허용값. 밴드 = Δψ_w 1.0–2.0 V 불확실성.")
     with colB:
         st.subheader("처방 표 (대표 t_IL)")
@@ -540,7 +546,8 @@ with tab2:
         dict(name=f"t_IL\n@ D_it {_dl}", x=s["til_hi"][0] / REF_TIL, mw=s["til_hi"][1],
              color=plot_tool.PLUM, ls=(0, (5, 3)), lo="0.5", hi="", cur=None),
     ]
-    st.pyplot(plot_tool.plot_sensitivity(curves, target), use_container_width=False)
+    st.pyplot(plot_tool.plot_sensitivity(curves, target),
+              use_container_width=False, bbox_inches=None)   # ↑와 같은 이유
 
     def _pct(y):
         return 100.0 * (y[-1] - y[0]) / y[0]
