@@ -127,17 +127,18 @@ def plot_designmap(m, target_mw, mw_loss_max, frac, presc, mw_ref):
         d, til = p.get("dit_max"), p.get("t_IL")
         if d is None or d > 1.02e13:
             continue
-        mec = "black" if p.get("bind") == "absolute" else RED
-        ax.plot([d], [til], "o", mfc="white", mec=mec, mew=2.2, ms=9, zorder=6)
+        bc = "black" if p.get("bind") == "absolute" else RED   # 구속 기준의 색
+        ax.plot([d], [til], "o", mfc="white", mec=bc, mew=2.2, ms=9, zorder=6)
         logpos = (np.log10(d) - 11.0) / 2.0                       # 0(1e11)~1(1e13)
         xoff, ha = (16, "left") if logpos < 0.24 else (-16, "right")  # 왼쪽 끝이면 박스 오른쪽
         dy = -13 if til >= 1.9 else (13 if til <= 0.6 else 0)     # 위/아래 끝이면 안쪽으로
         ax.annotate(f"{d/1e12:.1f}", xy=(d, til), xytext=(xoff, dy),
                     textcoords="offset points", ha=ha, va="center",
-                    fontsize=12, fontweight="bold", color="black",
-                    # 흰 배경 + 검은 글씨. 검은 테두리를 둘러 밝은 색띠(노랑·연두) 위에서도
-                    # 상자 경계가 사라지지 않게 한다.
-                    bbox=dict(boxstyle="round,pad=0.28", fc="white", ec="black", lw=1.0),
+                    fontsize=12, fontweight="bold", color="white",
+                    # 상자 배경도 구속 기준의 색으로 — 숫자와 그 숫자를 만든 선이 같은
+                    # 색으로 묶인다. 흰 테두리는 어두운 색띠(보라·남색) 위에서 상자
+                    # 경계가 사라지지 않게 하려고 남긴다.
+                    bbox=dict(boxstyle="round,pad=0.28", fc=bc, ec="white", lw=1.0),
                     zorder=7)
 
     ax.set_xscale("log")
