@@ -109,18 +109,22 @@ def plot_designmap(m, target_mw, mw_loss_max, frac, presc, mw_ref):
     # 고정 레이아웃(라벨 길이에 따라 그림이 흔들리지 않도록 add_axes 로 위치 고정)
     fig = Figure(figsize=(8.0, 4.9))
     ax = fig.add_axes([0.095, 0.155, 0.66, 0.80])
-    cax = fig.add_axes([0.875, 0.155, 0.028, 0.80])
+    # ★cax 를 직접 주면 >50 삼각형은 **그 축 안**에 들어간다(밖으로 넘치지 않는다).
+    #   그래서 막대 높이는 지도와 같은 0.80 그대로 두고, extendfrac 만 키우면 된다
+    #   — 기본값 0.05는 확정본의 삼각형보다 훨씬 작다(확정본은 막대의 약 1/6).
+    CB_H, EXT = 0.80, 0.20
+    cax = fig.add_axes([0.875, 0.155, 0.028, CB_H])
 
     cmap = ListedColormap(LOSS_BANDS)
     cmap.set_over(LOSS_OVER)
     cf = ax.contourf(m["X"], m["Y"], Z, levels=LEVELS, cmap=cmap, extend="max")
-    cb = fig.colorbar(cf, cax=cax, ticks=LEVELS)
+    cb = fig.colorbar(cf, cax=cax, ticks=LEVELS, extendfrac=EXT)
     cb.set_label("MW_loss  [%]", fontsize=12.5, fontweight="bold")
     cb.ax.tick_params(labelsize=10)
     cb.outline.set_linewidth(1.4)
     # >50 삼각형이 무슨 뜻인지 삼각형 옆에 직접 쓴다(눈금이 아니라 구간이라서)
-    cax.text(1.45, 1.055, "> 50", transform=cax.transAxes, ha="left", va="center",
-             fontsize=10, clip_on=False)
+    cax.text(1.45, 1.0 + EXT * 0.55, "> 50", transform=cax.transAxes, ha="left",
+             va="center", fontsize=10, clip_on=False)
 
     # colorbar 눈금: 빨강 = 상대 기준(loss_max), 검정 = 절대 기준의 등가 손실%
     yt = cax.get_yaxis_transform()   # x: cax 축분율, y: 데이터값(%)
