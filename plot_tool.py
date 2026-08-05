@@ -197,115 +197,121 @@ def plot_prescription(til, dit_nom, dit_lo, dit_hi, mw_loss_max, target_mw, show
     return fig
 
 
-def plot_sensitivity(curves, target_mw):
-    """정규화 1D 민감도 — 포스터 v4 그림3과 같은 형식(배율 축 한 장).
+NAVY = "#24406e"    # 소패널 제목 색 (1d민감도 수정안)
 
-    x = 설계 변수 / 그 변수의 현재 기준값. 축이 하나뿐이라 곡선끼리 기울기를 비교하는
-    것이 정당해진다. (v3의 트윈축[아래 t_FE·위 t_IL]은 같은 가로 거리가 변수마다 다른
-    양을 뜻해서, 정작 그 그림의 메시지였던 '기울기 비교'가 성립하지 않았다.)
 
-    ★보라 파선(D_it = 5×10¹²에서의 t_IL)은 반드시 함께 그린다 — 빼면 "t_IL은 중요하지
-      않다"로 읽히는데, 옆 design map은 t_IL이 두 축 중 하나다. 포스터·앱이 스스로
-      모순되는 그림 두 장을 걸게 된다. t_IL 0.5→2.0 nm의 MW 변화는 D_it에 따라
-      1×10¹¹ −0.6 % / 1×10¹² −6.0 % / 5×10¹² −33.4 % 다(계면 트랩과 함께일 때만 문다).
+def plot_sensitivity(panels, target_mw):
+    """1D 민감도 — 변수마다 소패널 1장씩(small multiples). 2026-08-05 '1d민감도 수정안' 형식.
 
-    ★×1 = **표 1 기준값 고정**(t_FE 10 nm · P_r 15 · t_IL 1.0 nm). 현재 슬라이더 값으로
-      정규화하면 슬라이더를 움직일 때마다 축의 의미가 바뀌어, 앱이 논문 수치
-      (MW 1.787 / 80.6 % / 처방 8.6·4.9·3.4·2.6)와 대조가 안 된다. 대신 "지금 내가
-      어디 있나"는 곡선 위 현재 설계점 마커(`cur`)가 맡는다.
+    이전 형식(배율 축 한 장에 4곡선)을 버린 이유: 한 축에 몰아넣으니 (i) 곡선끼리 서로
+    가리고, (ii) 가로축이 '배율'이라 t_FE 12 nm 가 몇 배인지 암산해야 했고, (iii) 끝점
+    라벨을 오른쪽 여백에 밀어 넣느라 정작 그림이 좁아졌다. 변수별로 축을 나누면 x축에
+    **실제 단위**를 쓸 수 있고, y축(MW)만 공유하므로 패널 사이 높이 비교는 그대로 된다.
 
-    curves: [{"name", "x"(배율), "mw", "color", "ls", "lo", "hi", "off"?, "cur"?}]
-            cur = (x, mw) 현재 설계점. 없으면 안 찍는다.
-    target_mw: 현재 목표 MW. 앱 전용(포스터엔 없음) — 목표가 슬라이더라 선이 있어야
-               "어느 변수를 얼마나 키워야 목표에 닿나"가 바로 읽힌다. 색은 design map의
-               절대기준선과 같은 **검정 파선**으로 통일(빨강은 t_IL 곡선 색과 충돌).
+    ★t_IL 패널의 두 곡선(기준 D_it · 높은 D_it)은 반드시 함께 그린다 — 빨강만 있으면
+      "t_IL은 중요하지 않다"로 읽히는데 옆 design map은 t_IL이 두 축 중 하나다.
+      t_IL 0.5→2.0 nm의 MW 변화는 D_it에 따라 1×10¹¹ −0.6 % / 1×10¹² −6.0 % /
+      5×10¹² −33.4 % 다(계면 트랩과 함께일 때만 문다).
+
+    ★한글 금지 — Streamlit Cloud(Linux)에 한글 글꼴이 없어 배포하면 □로 깨진다.
+      수정안 원본의 한글 제목("강유전체 두께 : 창을 키운다")은 영문으로 옮겨 쓴다.
+
+    panels: [{"title", "xlabel", "xticks",
+              "series": [{"x","y","color","ls"?,"label"?,"label_va"?}],
+              "cur": (x, y) | None,      # 현재 설계점(흰 원)
+              "cur_note": str | None}]   # 그 점에 붙일 설명(유도선)
+    target_mw: 현재 목표 MW. 앱 전용(수정안 원본엔 없음) — 목표가 슬라이더라 선이 있어야
+               "어느 변수를 얼마나 키워야 목표에 닿나"가 읽힌다. 색은 design map의
+               절대기준선과 같은 검정 파선으로 통일.
     """
-    fig = Figure(figsize=(6.9, 4.3))
-    ax = fig.add_axes([0.125, 0.170, 0.790, 0.795])
-
-    # 라벨은 곡선·목표선 위를 지날 수밖에 없다(목표가 슬라이더라 위치가 계속 바뀜)
-    # → 흰 후광을 둘러 겹쳐도 읽히게 한다. 고정 오프셋으로는 회피가 불가능하다.
+    fig = Figure(figsize=(9.2, 3.9), dpi=140)
+    axes = fig.subplots(1, 3, sharey=True)
+    # tight_layout 대신 고정 여백 — 라벨 길이가 바뀌어도 패널 폭이 흔들리지 않게(지도와 같은 이유)
+    #   wspace 는 넉넉히 — 패널이 붙으면 왼쪽 패널의 마지막 눈금과 오른쪽 패널의 첫 눈금이
+    #   글자끼리 겹쳐 "125" 처럼 읽힌다(실측).
+    fig.subplots_adjust(left=0.088, right=0.992, bottom=0.215, top=0.870, wspace=0.17)
     halo = [pe.withStroke(linewidth=3.0, foreground="white")]
 
-    xlo, xhi = 1.0, 1.0
     ylo, yhi = target_mw, target_mw
-    ends = []
-    for c in curves:
-        x = np.asarray(c["x"], float)
-        y = np.asarray(c["mw"], float)
-        ax.plot(x, y, ls=c.get("ls", "-"), color=c["color"], lw=3.0, zorder=3)
-        ax.annotate(c["lo"], xy=(x[0], y[0]), xytext=(-6, 0),
-                    textcoords="offset points", ha="right", va="center",
-                    fontsize=9.5, color=c["color"], zorder=6, path_effects=halo)
-        ends.append((float(x[-1]), float(y[-1]),
-                     f"{c['name']}  {c['hi']}".rstrip(), c["color"]))
-        xlo, xhi = min(xlo, float(x.min())), max(xhi, float(x.max()))
-        ylo, yhi = min(ylo, float(y.min())), max(yhi, float(y.max()))
+    pending = []          # 라벨은 y범위가 정해진 뒤에 붙인다(아래 참조)
+    for ax, p in zip(axes, panels):
+        for s in p["series"]:
+            x = np.asarray(s["x"], float)
+            y = np.asarray(s["y"], float)
+            ax.plot(x, y, ls=s.get("ls", "-"), color=s["color"], lw=3.4,
+                    solid_capstyle="round", dash_capstyle="round", zorder=3)
+            ylo, yhi = min(ylo, float(y.min())), max(yhi, float(y.max()))
+            if s.get("label"):
+                pending.append((ax, s, float(x[-1]), float(y[-1])))
 
-    # 목표 MW — 포스터엔 없지만 앱은 목표가 슬라이더라 여기 있는 게 맞다
-    ax.axhline(target_mw, color="black", ls="--", lw=1.7, zorder=2)
-    ax.annotate(f"target {target_mw:.2f} V", xy=(xlo, target_mw), xytext=(2, 4),
-                textcoords="offset points", ha="left", va="bottom",
-                fontsize=10, color="black", fontweight="bold", zorder=6,
-                path_effects=halo)
+        ax.axhline(target_mw, color="black", ls="--", lw=1.6, zorder=2)
 
-    # ×1 = 표 1 기준값(고정). 축이 흔들리지 않아야 논문 수치와 대조가 된다.
-    ax.axvline(1.0, color="0.6", lw=1.4, ls=(0, (4, 3)), zorder=2)
-    # (한글 금지 — Streamlit Cloud(Linux)에 한글 글꼴이 없어 □로 깨진다)
-    ax.annotate("×1 = paper baseline", xy=(1.0, 1.0), xycoords=("data", "axes fraction"),
-                xytext=(-5, -12), textcoords="offset points", ha="right", va="top",
-                fontsize=9, color="0.35", zorder=6, path_effects=halo)
+        cur = p.get("cur")
+        if cur is not None:
+            # 축 끝에 걸려도 반쪽만 그려지지 않도록 clip 해제
+            ax.plot([cur[0]], [cur[1]], "o", ms=10.5, mfc="white", mec="#333",
+                    mew=2.4, zorder=7, clip_on=False)
 
-    # 현재 설계점 — 슬라이더를 움직이면 이 점이 곡선을 따라 미끄러진다
-    for c in curves:
-        if c.get("cur") is None:
+        xs = np.concatenate([np.asarray(s["x"], float) for s in p["series"]])
+        ax.set_xlim(float(xs.min()), float(xs.max()))
+        ax.set_xticks(p["xticks"])
+        # 소수 눈금이 하나라도 있으면 전부 한 자리로 (0.5·1·1.5·2 → 0.5·1.0·1.5·2.0)
+        _fr = any(abs(t - round(t)) > 1e-9 for t in p["xticks"])
+        ax.set_xticklabels([f"{t:.1f}" if _fr else f"{t:g}" for t in p["xticks"]])
+        ax.set_xlabel(p["xlabel"], fontsize=13, fontweight="bold")
+        ax.set_title(p["title"], fontsize=11.5, color=NAVY, pad=9)
+        ax.tick_params(labelsize=11.5)
+        ax.set_axisbelow(True)
+        ax.grid(True, color="0.90", lw=1.0)
+        for sp in ax.spines.values():
+            sp.set_linewidth(1.6)
+            sp.set_color("#1a1a1a")
+
+    axes[0].set_ylabel("Memory window  MW  [V]", fontsize=13, fontweight="bold")
+    pad = 0.09 * max(yhi - ylo, 0.2)
+    axes[0].set_ylim(ylo - pad, yhi + pad)      # sharey → 세 패널 공통
+    y0, y1 = axes[0].get_ylim()
+
+    # ── 곡선 이름표·현재점 설명은 y범위가 정해진 뒤에 붙인다 ────────────────
+    #   위아래 어느 쪽에 놓을지는 그 곡선이 패널 안에서 어디쯤 있느냐에 달렸다.
+    #   t_FE를 키우면 세 패널의 곡선이 통째로 위로 올라가는데, 그때도 "선 위"를
+    #   고집하면 이름표가 제목 위로 튀어나간다(실측: t_FE 18 nm).
+    def _frac(v):
+        return (v - y0) / (y1 - y0)
+
+    for ax, s, ex, ey in pending:
+        # 곡선 오른쪽 끝에 그 곡선 색으로 직접 붙인다 — 범례 상자를 따로 두면 좁은
+        # 패널을 더 잡아먹고 눈이 그림↔범례를 왕복해야 한다.
+        va = s.get("label_va", "bottom")
+        f = _frac(ey)
+        if va == "bottom" and f > 0.86:     # 위로 붙일 자리가 없으면 아래로
+            va = "top"
+        elif va == "top" and f < 0.14:      # 아래로 붙일 자리가 없으면 위로
+            va = "bottom"
+        ax.annotate(s["label"], xy=(ex, ey), xytext=(-3, 10 if va == "bottom" else -10),
+                    textcoords="offset points", ha="right", va=va,
+                    fontsize=12, color=s["color"], fontweight="bold",
+                    zorder=6, path_effects=halo)
+
+    for ax, p in zip(axes, panels):
+        cur, note = p.get("cur"), p.get("cur_note")
+        if cur is None or not note:
             continue
-        cx, cy = c["cur"]
-        ax.plot([cx], [cy], "o", ms=11, mfc="white", mec=c["color"], mew=2.6, zorder=7)
+        xa, xb = ax.get_xlim()
+        right = (cur[0] - xa) / (xb - xa) > 0.55      # 오른쪽에 있으면 왼쪽으로 뺀다
+        up = _frac(cur[1]) < 0.72                     # 위쪽에 있으면 아래로 단다
+        ax.annotate(note, xy=cur,
+                    xytext=(-14 if right else 14, 34 if up else -34),
+                    textcoords="offset points",
+                    ha="right" if right else "left", va="center",
+                    fontsize=11, color="#555", zorder=7, path_effects=halo,
+                    arrowprops=dict(arrowstyle="-", color="#999", lw=1.0,
+                                    shrinkA=2, shrinkB=6))
 
-    xs, ys = xhi - xlo, max(yhi - ylo, 0.2)
-    ax.set_xlim(xlo - 0.06 * xs, xhi + 0.42 * xs)     # 오른쪽 = 끝점 라벨 자리
-    ax.set_ylim(ylo - 0.10 * ys, yhi + 0.10 * ys)
-    xt = [t for t in (0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0) if xlo - 1e-9 <= t <= xhi + 1e-9]
-    ax.set_xticks(xt)
-    ax.set_xticklabels([f"×{t:g}" for t in xt])       # mathtext 금지 → 유니코드 ×
-    # ★포스터 그림3은 이 축을 한글("설계 변수 / 그 변수의 기준값")로 쓰지만, 앱은 영문으로
-    #   둔다 — Streamlit Cloud(Linux)에 한글 글꼴이 없어 배포하면 전부 □로 깨진다.
-    ax.set_xlabel("Design variable  /  paper baseline (Table 1)",
-                  fontsize=12.5, fontweight="bold")
-    ax.set_ylabel("Memory window  MW  [V]", fontsize=12.5, fontweight="bold")
-    ax.tick_params(labelsize=11)
-    ax.set_axisbelow(True)
-    ax.grid(True, color="0.90", lw=1.0)
-
-    # ── 끝점 라벨을 오른쪽 여백에 세로로 겹치지 않게 배치 ────────────────────
-    #   포스터(_시안_민감도_qfdit.py)는 곡선마다 위치를 손으로 잡아 뒀지만, 앱은
-    #   슬라이더로 곡선이 움직여서 그 방식이 통하지 않는다. 곡선끝 y가 서로 붙으면
-    #   (예: P_r·t_IL이 둘 다 기준점 근처로 수렴) 라벨이 그대로 포개진다.
-    #   → 공통 x(오른쪽 여백)에 모으고, y만 최소간격으로 밀어 분리한 뒤 유도선을 잇는다.
-    x0, x1 = ax.get_xlim()
-    y0, y1 = ax.get_ylim()
-    gut = (xhi + 0.05 * xs - x0) / (x1 - x0)          # 라벨 왼쪽 끝(axes 분율)
-    LH = 11.0 / (fig.get_size_inches()[1] * 72 * 0.795)   # 한 줄 높이(axes 분율)
-    items = sorted(
-        ({"f": (ey - y0) / (y1 - y0), "n": 1 + t.count("\n"), "t": t, "c": col,
-          "ex": ex, "ey": ey} for ex, ey, t, col in ends),
-        key=lambda d: d["f"])
-    top = -1.0
-    for it in items:                                   # 아래→위로 밀어 올리며 분리
-        half = it["n"] * LH / 2 + 0.012
-        it["f"] = max(it["f"], top + half)
-        top = it["f"] + half
-    over = top - 1.0
-    if over > 0:                                       # 위로 넘치면 통째로 내린다
-        for it in items:
-            it["f"] -= over
-    for it in items:
-        ly = y0 + it["f"] * (y1 - y0)
-        if abs(ly - it["ey"]) > 0.01 * (y1 - y0):      # 옮긴 만큼 유도선을 그어 준다
-            ax.plot([it["ex"], x0 + gut * (x1 - x0)], [it["ey"], ly],
-                    color=it["c"], lw=0.9, ls=(0, (2, 2)), alpha=0.75, zorder=4)
-        ax.text(gut + 0.012, it["f"], it["t"], transform=ax.transAxes,
-                ha="left", va="center", fontsize=11, color=it["c"],
-                fontweight="bold", zorder=6, path_effects=halo)
+    # 목표선은 세 패널을 가로지르므로 이름표는 맨 왼쪽에 한 번만 단다
+    axes[0].annotate(f"target {target_mw:.2f} V", xy=(0.02, target_mw),
+                     xycoords=("axes fraction", "data"), xytext=(0, 4),
+                     textcoords="offset points", ha="left", va="bottom",
+                     fontsize=11, color="black", fontweight="bold", zorder=6,
+                     path_effects=halo)
     return fig

@@ -570,23 +570,39 @@ with tab2:
     dit_cmp = float(st.session_state["dit_cmp"])
     s = compute_sensitivity(t_fe, pr, dpsi, ec, na, dit_cmp)
     _dl = _dit_label(dit_cmp)
-    curves = [
-        dict(name="t_FE", x=s["tfe"][0] / REF_TFE, mw=s["tfe"][1],
-             color=plot_tool.BLUE, ls="-", lo="5", hi="20 nm",
-             cur=(t_fe / REF_TFE, float(np.interp(t_fe, s["tfe"][0], s["tfe"][1])))),
-        dict(name="P_r", x=s["pr"][0] / REF_PR, mw=s["pr"][1],
-             color=plot_tool.TEAL, ls="-", lo="5", hi="25 μC/cm²",
-             cur=(pr / REF_PR, float(np.interp(pr, s["pr"][0], s["pr"][1])))),
-        # t_IL은 사이드바 슬라이더가 아니라 지도의 축이라 1D 기준값 1.0 nm에 고정 → 항상 ×1
-        dict(name="t_IL", x=s["til"][0] / REF_TIL, mw=s["til"][1],
-             color=plot_tool.RED, ls="-", lo="0.5", hi="2 nm",
-             cur=(1.0, float(np.interp(REF_TIL, s["til"][0], s["til"][1])))),
-        # 두 줄로 쪼갬: 한 줄이면 오른쪽 여백을 넘는다 (세로 분리는 plot_tool이 처리)
-        dict(name=f"t_IL\n@ D_it {_dl}", x=s["til_hi"][0] / REF_TIL, mw=s["til_hi"][1],
-             color=plot_tool.PLUM, ls=(0, (5, 3)), lo="0.5", hi="", cur=None),
+    # ── t_FE 패널의 가로 범위 ────────────────────────────────────────────
+    #   기본은 수정안과 같은 5–12 nm. 세 패널이 y축(MW)을 공유하므로, 엔진이 계산해 둔
+    #   20 nm까지 늘 그리면 MW가 3.6 V까지 올라가 P_r·t_IL 패널이 아래쪽에 눌려
+    #   납작해진다(바로 이 그림을 고치려던 이유). 그래서 **필요할 때만** 넓힌다 —
+    #   현재 설정이 12 nm를 넘거나, 목표에 닿는 데 그보다 두꺼운 t_FE가 필요할 때.
+    _need = min_tfe_for_target(pr, dpsi, ec, na, target)
+    tfe_hi = min(20.0, max(12.0, np.ceil(t_fe), np.ceil(_need) if _need else 0.0))
+    _mt = s["tfe"][0] <= tfe_hi + 1e-9
+    tfe_ticks = [5] + [t for t in (10, 15, 20) if t < tfe_hi - 0.6] + [tfe_hi]
+    panels = [
+        dict(title="(a) Thicker FE — wider window",
+             xlabel="t_FE  [nm]", xticks=tfe_ticks,
+             series=[dict(x=s["tfe"][0][_mt], y=s["tfe"][1][_mt], color=plot_tool.BLUE)],
+             cur=(t_fe, float(np.interp(t_fe, s["tfe"][0], s["tfe"][1]))),
+             cur_note="current setting"),
+        dict(title="(b) Higher P_r — saturates",
+             xlabel="P_r  [μC/cm²]", xticks=[5, 10, 15, 20, 25],
+             series=[dict(x=s["pr"][0], y=s["pr"][1], color=plot_tool.TEAL)],
+             cur=(pr, float(np.interp(pr, s["pr"][0], s["pr"][1])))),
+        # t_IL은 사이드바 슬라이더가 아니라 지도의 축이라 흰 원은 기준값 1.0 nm에 고정
+        dict(title="(c) t_IL — bites only with traps",
+             xlabel="t_IL  [nm]", xticks=[0.5, 1.0, 1.5, 2.0],
+             series=[dict(x=s["til"][0], y=s["til"][1], color=plot_tool.RED,
+                          label=f"D_it = {_dit_label(1e11)}", label_va="bottom"),
+                     dict(x=s["til_hi"][0], y=s["til_hi"][1], color=plot_tool.PLUM,
+                          ls=(0, (5, 3)), label=f"D_it = {_dl}", label_va="top")],
+             cur=(REF_TIL, float(np.interp(REF_TIL, s["til"][0], s["til"][1])))),
     ]
-    st.pyplot(plot_tool.plot_sensitivity(curves, target),
-              use_container_width=False, bbox_inches=None)   # ↑와 같은 이유
+    # 3패널이라 그림이 가로로 길다 → 컨테이너 폭에 맞춰 스케일(폰에서 넘치지 않게).
+    # bbox_inches=None 은 지도와 같은 이유 — 라벨 위치에 따라 잘라내면 출력 크기가
+    # 실행마다 달라져 그림이 들쭉날쭉해진다.
+    st.pyplot(plot_tool.plot_sensitivity(panels, target),
+              use_container_width=True, bbox_inches=None)
     st.select_slider(
         "보라 파선의 D_it — 올려 보면 t_IL 곡선이 갈라짐", options=DIT_CMP_OPTS,
         key="dit_cmp", format_func=_dit_label,
@@ -600,7 +616,8 @@ with tab2:
 
     st.caption(
         f"현재 설정(t_FE {t_fe:.1f} nm, P_r {pr:.0f} μC/cm², Δψ_w {dpsi:.1f} V) 기준. "
-        f"t_FE 5→20 nm면 MW {s['tfe'][1][0]:.2f}→{s['tfe'][1][-1]:.2f} V. "
+        f"t_FE 5→{tfe_hi:g} nm면 MW {s['tfe'][1][0]:.2f}"
+        f"→{float(np.interp(tfe_hi, s['tfe'][0], s['tfe'][1])):.2f} V. "
         f"t_IL 0.5→2.0 nm는 기준 D_it(1×10¹¹)에서 {_pct(s['til'][1]):+.1f} % 로 미미하지만, "
         f"D_it = {_dl}에서는 {_pct(s['til_hi'][1]):+.1f} % 로 급격함. "
         "※ P_r 곡선은 P_s > P_r 유지를 위해 P_s = 1.3·P_r 로 함께 올린 결과라, 배율 1.0에서 "
@@ -609,23 +626,23 @@ with tab2:
 
     st.markdown(
         "한 번에 한 변수만 바꿨을 때 memory window(MW)가 어떻게 변하는지 봄. "
-        "가로축은 **각 변수를 논문 표 1의 기준값으로 나눈 배율**임 "
-        "(×1 = t_FE 10 nm · P_r 15 μC/cm² · t_IL 1.0 nm). 축이 하나뿐이라 곡선끼리 "
-        "기울기를 직접 비교할 수 있고, 기준이 고정이라 논문 수치와 언제든 대조됨.\n\n"
+        "패널 3개가 **세로축(MW)을 공유**하므로 가로축은 각자 **실제 단위**로 두면서도 "
+        "패널끼리 높이 비교가 그대로 됨.\n\n"
+        "- **(a) t_FE** — 강유전체가 두꺼울수록 MW가 거의 선형으로 증가함. 목표 미달이면 "
+        "여기서 t_FE를 얼마나 올려야 하는지 바로 읽힘. (기본 표시는 5–12 nm이고, 현재 "
+        "설정이나 목표 달성에 더 두꺼운 t_FE가 필요하면 그만큼만 자동으로 넓어짐)\n"
+        "- **(b) P_r** — 잔류분극이 클수록 MW가 커지지만 점점 포화함.\n"
+        "- **(c) t_IL** — 빨간 실선(기준 D_it)은 **거의 수평** = 계면층 두께 단독으로는 MW가 "
+        "거의 안 변함. 보라 파선은 트랩이 많을 때인데 ★같은 t_IL인데도 **급격히 깎임**. "
+        "그림 아래 슬라이더로 D_it를 올려 보면 두 곡선이 벌어지는 게 보임.\n\n"
         "- **흰 원** = 지금 사이드바 설정이 각 곡선 위에서 어디인지. 슬라이더를 움직이면 "
-        "곡선을 따라 미끄러짐.\n"
+        "곡선을 따라 미끄러짐. ((c)는 조절 대상이 아니라 지도의 축이므로 기준값 "
+        "t_IL 1.0 nm에 고정)\n"
         "- **검은 파선** = 현재 목표 MW. 곡선이 이 선 위로 올라가는 지점부터 목표 달성임 "
         "(옆 탭 design map의 절대 기준선과 같은 표기).\n\n"
-        "- **t_FE** — 강유전체가 두꺼울수록 MW가 거의 선형으로 증가함. 목표 미달이면 이 "
-        "곡선으로 t_FE를 얼마나 올려야 하는지 바로 읽힘.\n"
-        "- **P_r** — 잔류분극이 클수록 MW가 커지지만 점점 포화함.\n"
-        "- **t_IL (빨강)** — 계면층 두께 **단독으로는 MW가 거의 안 변함**.\n"
-        "- **t_IL (보라 파선)** — ★같은 t_IL인데 계면 트랩이 많으면 **급격히 깎임**. "
-        "그림 아래 슬라이더로 D_it를 올려 보면 두 t_IL 곡선이 벌어지는 게 보임 — "
-        "t_IL은 혼자서는 무해하고 **D_it와 얽힐 때만** MW를 문다는 뜻.\n\n"
-        "왜 중요한가 — 빨강만 보면 \"t_IL은 중요하지 않다\"로 읽히는데, 옆 탭의 design map은 "
-        "t_IL이 두 축 중 하나임. 보라 파선이 그 모순을 풀어 주고, **허용범위를 D_it×t_IL "
-        "2차원으로 봐야 하는 근거**가 됨."
+        "왜 중요한가 — (c)의 빨강만 보면 \"t_IL은 중요하지 않다\"로 읽히는데, 옆 탭의 "
+        "design map은 t_IL이 두 축 중 하나임. 보라 파선이 그 모순을 풀어 주고, "
+        "**허용범위를 D_it×t_IL 2차원으로 봐야 하는 근거**가 됨."
     )
 
 with tab3:
