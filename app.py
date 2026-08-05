@@ -32,6 +32,27 @@ st.markdown("""
 /* 요약 카드(통과율·baseline MW·목표 달성)를 폰에서도 가로 한 줄로 */
 div[data-testid="stHorizontalBlock"]:has([data-testid="stMetric"]){flex-wrap:nowrap !important;}
 div[data-testid="stHorizontalBlock"]:has([data-testid="stMetric"]) > div{min-width:0 !important;}
+
+/* ★ 모바일에서 ⓘ/? 도움말 말풍선 글자 잘림 방지.
+   Streamlit 기본 CSS는 화면폭 <576px 에서 말풍선을 max-width:calc(100% - 2rem) 로 두는데,
+   부모(떠 있는 래퍼)가 width:max-content 라 이 퍼센트가 사실상 제한이 안 걸린다.
+   → 말풍선이 한 줄로 쭉 늘어나 화면 밖으로 나가고 글자가 잘림.
+   vw 로 못박아 화면 안에서 줄바꿈되게 한다. (세로로 길면 스크롤) */
+div[data-testid="stTooltipContent"],
+div[data-testid="stTooltipErrorContent"]{
+    max-width:min(92vw, 28rem) !important;
+    white-space:normal !important;
+    overflow-wrap:anywhere;
+    word-break:break-word;
+    max-height:min(60vh, 18.75rem) !important;
+    overflow-y:auto;
+}
+/* 말풍선을 감싸고 떠 있는 래퍼(width:max-content)도 같이 묶어 둔다.
+   래퍼는 emotion 해시 클래스라 버전마다 이름이 바뀌므로 :has() 로 구조 지정. */
+div:has(> div[data-testid="stTooltipContent"]),
+div:has(> div[data-testid="stTooltipErrorContent"]){
+    max-width:min(92vw, 28rem) !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
