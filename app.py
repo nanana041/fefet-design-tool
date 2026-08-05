@@ -56,16 +56,17 @@ div:has(> div[data-testid="stTooltipErrorContent"]){
 </style>
 """, unsafe_allow_html=True)
 
-# ── 슬라이더 값 숫자를 그 기준의 **선 모양**과 같은 표기로 (막대 색은 Streamlit 한계로 파랑) ──
-#   손실 허용치(상대) = 지도의 검은 실선 → 검은 숫자
-#   목표 MW·레벨당 마진(절대) = 지도의 흰 파선 → 흰 숫자 + 어두운 그림자(흰 바탕에서 읽히게)
+# ── 슬라이더 값 숫자를 파랑(테마색) 대신 진한 검정으로 ──
+#   ★흰 글자 + 어두운 그림자로 "흰 파선"을 흉내내 봤지만 폰에서는 그냥 **안 보이는 것**으로
+#     읽혔다(실측: 목표 MW 값 2.00 이 배경에 묻힘). UI 글자에 흰색은 쓰지 않는다.
+#     실선/파선 구분은 라벨 앞 선 기호(━━ / ━ ━)가 맡는다.
 #   (앵커 다음 슬라이더의 값 숫자만 CSS로 색칠 — 이 부분은 확실히 동작)
 st.markdown(
     """
     <style>
     div[data-testid="stElementContainer"]:has(.anch-dv),
     div[data-testid="stElementContainer"]:has(.anch-loss){display:none !important;}
-    div[data-testid="stElementContainer"]:has(.anch-dv) + div[data-testid="stElementContainer"] [data-testid="stSliderThumbValue"]{color:#fff !important;text-shadow:0 0 2px #333,0 0 2px #333,0 0 3px #333;}
+    div[data-testid="stElementContainer"]:has(.anch-dv) + div[data-testid="stElementContainer"] [data-testid="stSliderThumbValue"],
     div[data-testid="stElementContainer"]:has(.anch-loss) + div[data-testid="stElementContainer"] [data-testid="stSliderThumbValue"]{color:#111 !important;}
     </style>
     """,
@@ -392,25 +393,27 @@ with tab1:
     cc1, cc2 = st.columns(2)
     cc1.markdown('<span class="anch-loss"></span>', unsafe_allow_html=True)
     cc1.slider(
-        "⬛ 손실 허용치 MW_loss_max [%]", min_value=10, max_value=50, step=5,
+        "━━ 손실 허용치 MW_loss_max [%]", min_value=10, max_value=50, step=5,
         key="loss_max",
         help="이상적 기준선(MW_ref) 대비 MW가 얼마나 줄어드는 것까지 허용할지(상대 기준). "
              "예: 30%면 'MW가 기준선의 70% 이상이면 합격'. "
              "★30 %는 업계 표준이 아니라 이 도구가 쓰는 예시 기준임 — 슬라이더로 바꿔 볼 것.")
-    # ⬜ + anch-dv: 목표 MW는 **절대 기준** = 지도의 **흰 파선**.
-    #   (⬛/anch-loss = 상대 기준 = 지도의 **검은 실선**. 이모지는 장식이 아니라 이 슬라이더가
-    #    그림의 어느 선을 움직이는지를 가리키는 표시다 — 선 표기가 바뀌면 같이 바꾼다.)
+    # ━ ━ + anch-dv: 목표 MW는 **절대 기준** = 지도의 **흰 파선**.
+    #   (━━/anch-loss = 상대 기준 = 지도의 **검은 실선**. 라벨 앞 기호는 장식이 아니라 이
+    #    슬라이더가 그림의 어느 선을 움직이는지를 가리킨다 — 선 표기가 바뀌면 같이 바꾼다.)
+    #   ★기호는 색이 아니라 **모양**(이어짐/끊김)으로 말해야 한다. 색 네모(⬛/⬜)는 흰
+    #    바탕에서 흰 쪽이 사라져 라벨이 깨진 것처럼 보였다(실측).
     cc2.markdown('<span class="anch-dv"></span>', unsafe_allow_html=True)
     if tgt_mode == "MLC로 계산":
         cc2.slider(
-            "⬜ 레벨당 마진 ΔV_level [V]", min_value=0.5, max_value=1.5, step=0.1,
+            "━ ━ 레벨당 마진 ΔV_level [V]", min_value=0.5, max_value=1.5, step=0.1,
             key="dv_level",
             help="인접한 두 저장 레벨 사이에 확보해야 할 최소 문턱전압 간격(읽기 여유)임. "
                  "클수록 안전하지만 요구되는 MW가 커짐.")
         cc2.caption(f"→ 목표 MW = (N−1)×ΔV_level = **{target:.2f} V** (절대 기준)")
     else:
         cc2.slider(
-            "⬜ 목표 MW [V]", min_value=0.80, max_value=2.00, step=0.05,
+            "━ ━ 목표 MW [V]", min_value=0.80, max_value=2.00, step=0.05,
             key="tgt_direct",
             help="이 소자가 만족해야 할 memory window(절대 기준). "
                  "★0.8–1.4 V 구간은 답이 전혀 안 변함 — 그 구간에선 손실 허용치(상대 기준)가 "
@@ -433,9 +436,9 @@ with tab1:
     l_lo, l_hi = float(m["MW_loss"].min()), float(m["MW_loss"].max())
     w_lo, w_hi = float(m["MW"].min()), float(m["MW"].max())
     GRAY = "<span style='color:#777'>"
-    SOLID = ("<span style='font-weight:700;color:#111'>━━ 검은 실선</span>")
-    DASH = ("<span style='font-weight:700;color:#fff;"
-            "text-shadow:0 0 2px #333,0 0 2px #333,0 0 3px #333'>╌╌ 흰 파선</span>")
+    SOLID = "<span style='font-weight:700;color:#111'>━━ 검은 실선</span>"
+    # ★흰 글자는 쓰지 않는다(폰에서 안 보임) — '흰 파선'은 글자로 말하고 기호는 끊긴 선으로.
+    DASH = "<span style='font-weight:700;color:#111'>━ ━ 흰 파선</span>"
     rows_html = []
     if loss_max < l_lo:
         rows_html.append(f"{GRAY}검은 실선 없음</span> — 이 격자의 MW_loss 최소가 "
@@ -459,8 +462,11 @@ with tab1:
         edge = ("<br><span style='color:#6b6b6b;font-weight:700'>○ 회색 ≥10</span>"
                 " = 그 t_IL 에서는 D_it 를 스윕 끝(1×10¹³)까지 올려도 두 기준에 안 걸림"
                 " — 실제 상한은 이 범위 <b>밖</b>이라 하한만 표시함")
-    rows_html.append("<span style='font-weight:700'>○ 흰 원</span> = 허용 D_it 상한 "
-                     "[×10¹² cm⁻²eV⁻¹]" + edge)
+    # 처방점이 하나도 안 찍히는 조건(예: 목표 도달 불가)에서는 그 줄도 빼야 한다 —
+    # 그림에 없는 기호를 설명하고 있으면 "왜 안 보이지"를 찾게 만든다.
+    if any(p["dit_max"] is not None and p["dit_max"] <= 1.02e13 for p in presc):
+        rows_html.append("<span style='font-weight:700'>○ 흰 원</span> = 허용 D_it 상한 "
+                         "[×10¹² cm⁻²eV⁻¹]" + edge)
     rows_html.append("색 = MW_loss (5 % 마다, > 50 % 는 빨강 하나로)")
     st.markdown(
         f"<div style='font-size:0.9em;line-height:1.8'>{'<br>'.join(rows_html)}</div>",
