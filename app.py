@@ -108,7 +108,7 @@ with sb.expander("ℹ️ 각 값이 무슨 뜻인가요?  (처음이면 눌러�
         "이 도구는 \"이 목표를 만족하려면 계면(D_it·t_IL)을 얼마나 좋게 만들어야 하나\" 를 계산함.\n\n"
         "- ⚙️ 설계 노브 (본문) — 우리가 *만드는* 소자의 구조(강유전체 두께 등). 설계자가 직접 정하는 값.\n"
         "- 🎯 스펙/목표 (본문) — 우리가 *요구하는* 성능. 목표 MW를 정하면 도구가 허용 범위를 답해줌. "
-        "지도의 빨간 실선(상대 기준)·검은 파선(절대 기준)에 각각 대응함.\n"
+        "지도의 검은 실선(상대 기준)·흰 파선(절대 기준)에 각각 대응함.\n"
         "- 📉 불확실성 (Δψ_w) — 실험으로 아직 정확한 값을 못 정한 물리값. 하나로 못 박지 않고, "
         "가능한 범위(1.0–2.0 V)를 그래프에 띠(밴드) 로 함께 그려 불확실성의 폭을 보여줌.\n"
         "- 🔲 격자 — 지도 계산 해상도. 매끄러움·속도만 바뀌고 결과 수치엔 거의 영향 없음.\n\n"
@@ -294,7 +294,7 @@ def binding_of_row(r):
       목표 1.3 V 에서 t_IL 0.5 nm 행의 MW_loss 는 최대 33.3 %). 이때 dit_upper_bounds
       는 상한으로 격자 끝(1e13)을 돌려주는데, 그건 실제 상한이 아니라 "여기까지는
       확인했다"는 뜻이다. 예전 규칙은 dit_abs 가 None 이면 무조건 relative 로 봤기
-      때문에 이 칸이 빨강으로 칠해져, 걸리지도 않은 상대 기준이 상한을 정한 것처럼
+      때문에 이 칸이 실제 상한처럼 표시돼, 걸리지도 않은 기준이 상한을 정한 것처럼
       보였다."""
     if r["dit_max"] is None:
         return None
@@ -369,7 +369,8 @@ tab1, tab2, tab3 = st.tabs(["📊 설계범위 지도 & 처방", "📈 1D 민감
 
 with tab1:
     trows = table_bounds(t_fe, pr, dpsi, ec, na, loss_max, target)   # 처방(지도 빨간숫자 + 아래 표 공용)
-    # bind: 이 점의 상한을 정한 기준 → 지도에서 원 테두리 색(빨강/검정)으로 쓰인다
+    # bind: 이 점의 상한을 정한 기준 → 아래 구속 안내 띠와, 지도에서 "none"(격자 끝)
+    #       점을 회색으로 구분하는 데 쓰인다
     presc = [{"t_IL": r["t_IL"], "dit_max": r["dit_max"], "bind": binding_of_row(r)}
              for r in trows]
     # ── 헤드라인: Design window 지도 ──
@@ -394,9 +395,9 @@ with tab1:
         help="이상적 기준선(MW_ref) 대비 MW가 얼마나 줄어드는 것까지 허용할지(상대 기준). "
              "예: 30%면 'MW가 기준선의 70% 이상이면 합격'. "
              "★30 %는 업계 표준이 아니라 이 도구가 쓰는 예시 기준임 — 슬라이더로 바꿔 볼 것.")
-    # ⚫ + anch-dv: 목표 MW는 **절대 기준**이므로 지도의 검정 파선과 같은 표기로 묶는다.
-    #   (🔴/anch-loss = 상대 기준 = 지도의 빨간 실선. 이모지는 장식이 아니라 그림의
-    #    어느 선에 대응하는지를 가리키는 표시다.)
+    # ⚫ + anch-dv: 목표 MW는 **절대 기준** — 지도 컬러바의 검은 눈금과 같은 표기로 묶는다.
+    #   (🔴/anch-loss = 상대 기준 = 컬러바의 빨간 눈금. 확정 디자인에서 지도 위의 선은
+    #    상대=검은 실선·절대=흰 파선이고, 색으로 두 기준을 나누는 것은 컬러바 쪽이다.)
     cc2.markdown('<span class="anch-dv"></span>', unsafe_allow_html=True)
     if tgt_mode == "MLC로 계산":
         cc2.slider(
@@ -414,53 +415,43 @@ with tab1:
                  "먼저 걸리기 때문이며 고장이 아님. 1.5 V부터 절대 기준으로 바통이 넘어가고, "
                  "기본 스택(t_FE 10 nm)에서는 1.8 V 위가 도달 불가임.")
 
-    # ── 범례(MW_loss·MW·allowable D_it)를 그림 아래에 표기 (동적) ──
-    mw_rel = r0["MW_ref"] * (1.0 - loss_max / 100.0)
-    loss_abs = (r0["MW_ref"] - target) / r0["MW_ref"] * 100.0
-    # ★기준선이 지도 밖으로 나가면 왜 없는지 적는다.
+    # ── 그림에 못 담는 것만 아래에 적는다 ──────────────────────────────────
+    #   ★범례(두 기준선·처방점)는 2026-08-05 확정 디자인부터 **그림 안**에 있다.
+    #     여기서 또 쓰면 같은 말이 두 번 나오므로, 남기는 것은 그림이 스스로 말할 수
+    #     없는 것 — "그려졌어야 할 선이 왜 없는지" 와 "회색 ≥10 이 무슨 뜻인지" — 뿐이다.
     #   contour는 레벨이 데이터 범위 밖이면 아무것도 그리지 않는다. 슬라이더를 끝까지
     #   밀면 실제로 그렇게 된다 — 기본 스택의 MW_loss는 10.5~85.5 %라 손실 허용치
     #   10 %는 격자 아래로 빠지고, MW는 최대 1.79 V라 목표 2.0 V는 격자 위로 빠진다.
     #   선만 조용히 사라지면 고장으로 보이므로, 없는 이유와 그 뜻을 대신 표시한다.
     #   (아래로 벗어남 = 전 구간 미달 / 위로 벗어남 = 전 구간 통과 — 뜻이 정반대다.)
+    mw_rel = r0["MW_ref"] * (1.0 - loss_max / 100.0)
+    loss_abs = (r0["MW_ref"] - target) / r0["MW_ref"] * 100.0
     l_lo, l_hi = float(m["MW_loss"].min()), float(m["MW_loss"].max())
     w_lo, w_hi = float(m["MW"].min()), float(m["MW"].max())
     GRAY = "<span style='color:#777'>"
+    notes = []
     if loss_max < l_lo:
-        rel_html = (f"{GRAY}빨강 실선 없음</span> — 이 격자의 MW_loss 최소가 "
-                    f"{l_lo:.1f} %라 {loss_max:.0f} % 등고선이 지도 아래로 벗어남. "
-                    f"<b>전 구간이 상대 기준 미달</b>임.")
+        notes.append(f"{GRAY}검은 실선(상대 기준) 없음</span> — 이 격자의 MW_loss 최소가 "
+                     f"{l_lo:.1f} %라 {loss_max:.0f} % 등고선이 지도 아래로 벗어남. "
+                     f"<b>전 구간이 상대 기준 미달</b>임.")
     elif loss_max > l_hi:
-        rel_html = (f"{GRAY}빨강 실선 없음</span> — MW_loss 최대가 {l_hi:.1f} %라 "
-                    f"지도 전체가 상대 기준을 통과함(이 기준은 구속하지 않음).")
-    else:
-        rel_html = (f"<span style='color:#d1341f;font-weight:700'>━━ 빨강 실선</span>"
-                    f" = MW_loss {loss_max:.0f}% (상대) ≡ MW {mw_rel:.1f} V")
+        notes.append(f"{GRAY}검은 실선(상대 기준) 없음</span> — MW_loss 최대가 {l_hi:.1f} %라 "
+                     f"지도 전체가 상대 기준을 통과함(이 기준은 구속하지 않음).")
     if target > w_hi:
-        abs_html = (f"{GRAY}검정 파선 없음</span> — 이 스택의 MW 최대가 {w_hi:.2f} V라 "
-                    f"목표 {target:.2f} V에 <b>전 구간 도달 불가</b>.")
+        notes.append(f"{GRAY}흰 파선(절대 기준) 없음</span> — 이 스택의 MW 최대가 {w_hi:.2f} V라 "
+                     f"목표 {target:.2f} V에 <b>전 구간 도달 불가</b>.")
     elif target < w_lo:
-        abs_html = (f"{GRAY}검정 파선 없음</span> — MW 최소가 {w_lo:.2f} V라 지도 전체가 "
-                    f"목표를 넘김(이 기준은 구속하지 않음).")
-    else:
-        abs_html = (f"<span style='color:#111;font-weight:700'>╌╌ 검정 파선</span>"
-                    f" = MW {target:.1f} V (절대) ≡ {loss_abs:.0f}%")
-    # 회색 "≥10" 점이 하나라도 있으면 그게 뭔지 설명해 준다(실제 상한이 아님)
-    edge_html = ""
+        notes.append(f"{GRAY}흰 파선(절대 기준) 없음</span> — MW 최소가 {w_lo:.2f} V라 지도 전체가 "
+                     f"목표를 넘김(이 기준은 구속하지 않음).")
     if any(p["bind"] == "none" for p in presc):
-        edge_html = (" <br> <span style='color:#6b6b6b;font-weight:700'>○ 회색 ≥10</span>"
+        notes.append("<span style='color:#6b6b6b;font-weight:700'>○ 회색 ≥10</span>"
                      " = 그 t_IL 에서는 D_it 를 스윕 끝(1×10¹³)까지 올려도 두 기준에 안 걸림"
                      " — 실제 상한은 이 범위 <b>밖</b>이라 하한만 표시함")
-    st.markdown(
-        f"<div style='font-size:0.9em;line-height:1.8'>{rel_html}"
-        f" <br>{abs_html}"
-        f" <br> "
-        f"<span style='font-weight:700'>○ 처방점</span> = 허용 D_it 상한 [×10¹² cm⁻²eV⁻¹]"
-        f" (테두리 색 = 그 값을 정한 기준){edge_html}"
-        f" <br> 색 = MW_loss (5%마다, ≥50% 노랑)"
-        f"</div>",
-        unsafe_allow_html=True,
-    )
+    if notes:
+        st.markdown(
+            f"<div style='font-size:0.9em;line-height:1.8'>{'<br>'.join(notes)}</div>",
+            unsafe_allow_html=True,
+        )
 
     # ── 어느 기준이 구속인가 (이 도구의 하이라이트) ────────────────────────
     #   기준이 둘이고 둘 다 만족해야 한다: 상대(MW_loss ≤ loss_max) · 절대(MW ≥ target).
@@ -473,13 +464,13 @@ with tab1:
     _sw = binding_switch_target(t_fe, pr, dpsi, ec, na, loss_max)
     _swtxt = f" 이 스택에서는 목표 <b>{_sw:.2f} V</b>부터 절대 기준으로 넘어감." if _sw else ""
     if _bind == "relative":
-        _msg = (f"<b style='color:#d1341f'>지금은 빨강(상대) 기준이 구속</b> — 손실 허용치"
+        _msg = (f"<b style='color:#d1341f'>지금은 상대 기준이 구속</b> — 손실 허용치"
                 f"(MW_loss ≤ {loss_max:.0f} %)가 먼저 걸림. "
                 f"이 구간에서는 <b>목표 MW를 올려도 허용 D_it 상한이 변하지 않음</b>"
                 f"(고장 아님)." + _swtxt)
         _fg, _bg = "#d1341f", "#fdf0ed"
     elif _bind == "absolute":
-        _msg = (f"<b>지금은 검정(절대) 기준이 구속</b> — 목표 MW ≥ {target:.2f} V가 먼저 "
+        _msg = (f"<b>지금은 절대 기준이 구속</b> — 목표 MW ≥ {target:.2f} V가 먼저 "
                 f"걸림. 여기서부터는 목표를 올릴수록 허용 D_it 상한이 급격히 좁아짐."
                 + _swtxt)
         _fg, _bg = "#111111", "#f1f2f4"

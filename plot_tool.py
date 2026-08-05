@@ -22,7 +22,10 @@ import matplotlib.patheffects as pe
 #   경고). 서버에서 렌더만 할 때는 Figure 를 직접 쓰는 것이 공식 권장 방식이고, 전역
 #   상태가 없어져 스레드 반복 실행에서 생기는 문제(이 파일 위쪽 mathtext 주석 참조)의
 #   여지도 줄어든다.
+from matplotlib.backends.backend_agg import FigureCanvasAgg
+from matplotlib.colors import ListedColormap
 from matplotlib.figure import Figure
+from matplotlib.legend_handler import HandlerTuple
 from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 from matplotlib.ticker import FuncFormatter, NullFormatter, LogLocator
@@ -31,6 +34,13 @@ RED = "#d1341f"
 BLUE = "#1f6fd6"
 TEAL = "#0f8a7e"    # 포스터 v4 그림3 하우스 색 (P_r 곡선)
 PLUM = "#8e44ad"    # 〃 (D_it=5e12 에서의 t_IL — 상호작용 곡선)
+
+# ── design map 색띠 (2026-08-05 확정본 '스크린샷(251)'에서 픽셀로 추출) ──────
+#   matplotlib 기본 컬러맵이 아니다 — 가장 가까운 것(gist_earth)과도 평균 |ΔRGB| 36
+#   이라 이름으로 못 부른다. 그래서 값으로 박아 둔다. 10–15 % 부터 5 % 간격 8칸.
+LOSS_BANDS = ["#1c4f7e", "#215f9a", "#0070c0", "#3d9987",
+              "#80c262", "#b2d729", "#feda02", "#f8b342"]
+LOSS_OVER = "#e35d4f"      # > 50 % (컬러바 위쪽 삼각형)
 
 # design map 축 여백 — 경계에 찍히는 처방 흰 원(ms=9pt)이 잘리지 않을 만큼만.
 # x는 로그축이라 decade 단위, y는 nm 단위.
@@ -83,10 +93,15 @@ def _set_pe(cs, lw, fg):
 
 
 def plot_designmap(m, target_mw, mw_loss_max, frac, presc, mw_ref):
-    """MW_loss design map — 5%마다 이산 색띠, ≥50% 노랑 통일(extend max),
-    사선 없음, 빨간 상대선+흰 원마커+동적 빨간 박스숫자(허용 D_it), 검정 파선 절대선.
-    축·그림 크기 고정, colorbar 빨간 눈금 + design window 브래킷.
-    presc: [{t_IL, dit_max}, ...] (t_IL 0.5/1.0/1.5/2.0),  mw_ref: 정규화 기준선(V)."""
+    """MW_loss design map — 2026-08-05 확정 디자인('스크린샷(251)').
+
+    5 % 간격 이산 색띠(위 LOSS_BANDS) + >50 % 삼각형, 사선 없음.
+    상대 기준선 = **굵은 검은 실선**, 절대 기준선 = **흰 파선**, 처방점 = 흰 원(검은
+    테두리) + 흰 상자에 검은 숫자, 범례는 **그림 안 왼쪽 아래**.
+    컬러바: 빨간 눈금(상대) · 검은 눈금(절대) · design window 브래킷.
+
+    presc: [{t_IL, dit_max, bind}, ...] (t_IL 0.5/1.0/1.5/2.0),  mw_ref: 정규화 기준선(V).
+    """
     LEVELS = list(range(10, 51, 5))      # 10,15,...,50
     Z = np.clip(m["MW_loss"], 10.0, None)  # <10은 최하위 색으로(흰 구멍 방지 → 바닥 10 고정)
 
@@ -95,61 +110,60 @@ def plot_designmap(m, target_mw, mw_loss_max, frac, presc, mw_ref):
     ax = fig.add_axes([0.095, 0.155, 0.66, 0.80])
     cax = fig.add_axes([0.875, 0.155, 0.028, 0.80])
 
-    cf = ax.contourf(m["X"], m["Y"], Z, levels=LEVELS, cmap="viridis", extend="max")
+    cmap = ListedColormap(LOSS_BANDS)
+    cmap.set_over(LOSS_OVER)
+    cf = ax.contourf(m["X"], m["Y"], Z, levels=LEVELS, cmap=cmap, extend="max")
     cb = fig.colorbar(cf, cax=cax, ticks=LEVELS)
     cb.set_label("MW_loss  [%]", fontsize=12.5, fontweight="bold")
     cb.ax.tick_params(labelsize=10)
+    cb.outline.set_linewidth(1.4)
+    # >50 삼각형이 무슨 뜻인지 삼각형 옆에 직접 쓴다(눈금이 아니라 구간이라서)
+    cax.text(1.45, 1.055, "> 50", transform=cax.transAxes, ha="left", va="center",
+             fontsize=10, clip_on=False)
 
-    # colorbar 위 빨간 눈금(=상대 기준 loss_max) + design window 브래킷(10~loss_max)
+    # colorbar 눈금: 빨강 = 상대 기준(loss_max), 검정 = 절대 기준의 등가 손실%
     yt = cax.get_yaxis_transform()   # x: cax 축분율, y: 데이터값(%)
-    cax.plot([0, 1], [mw_loss_max, mw_loss_max], transform=yt, color=RED, lw=2.5,
+    cax.plot([-0.1, 1.1], [mw_loss_max, mw_loss_max], transform=yt, color=RED, lw=3.0,
              clip_on=False, zorder=5)
     _loss_abs = (mw_ref - target_mw) / mw_ref * 100.0   # 절대선 등가 손실%
-    if 10.0 <= _loss_abs <= 50.0:                        # colorbar에 검정 파선 눈금
-        cax.plot([0, 1], [_loss_abs, _loss_abs], transform=yt, color="black", ls="--",
-                 lw=1.8, clip_on=False, zorder=5)
-    bx = -1.5
-    for seg in ([bx, bx], [10, mw_loss_max]), ([bx, bx + 0.4], [10, 10]), ([bx, bx + 0.4], [mw_loss_max, mw_loss_max]):
-        cax.plot(seg[0], seg[1], transform=yt, color="#555", lw=1.3, clip_on=False, zorder=4)
-    cax.text(bx - 0.7, (10 + mw_loss_max) / 2, "design window", transform=yt, rotation=90,
-             ha="center", va="center", fontsize=9, fontweight="bold", color="#222", clip_on=False)
-    cax.text(bx + 1.05, (10 + mw_loss_max) / 2, f"{frac:.1f} % of grid", transform=yt, rotation=90,
-             ha="center", va="center", fontsize=7.5, color="#888", clip_on=False)
+    if 10.0 <= _loss_abs <= 50.0:
+        cax.plot([-0.1, 1.1], [_loss_abs, _loss_abs], transform=yt, color="black",
+                 lw=3.0, clip_on=False, zorder=5)
+    # design window 브래킷 — 왼쪽부터 [통과율(회색) · design window(굵게) · 브래킷 · 바]
+    #   ★브래킷 끝은 loss_max 가 아니라 **두 기준 중 더 빡센 쪽**이다. 둘 다 만족해야
+    #     통과이므로, 절대 기준이 더 빡세면(목표를 올리면) 통과 구간은 검은 눈금에서
+    #     끊긴다. loss_max 로 고정해 두면 브래킷이 옆의 통과율 숫자와 어긋난다
+    #     (실측: 목표 1.60 V → 브래킷 10–30 % 인데 실제 통과는 20 % 까지).
+    bx = -1.4
+    win_top = min(mw_loss_max, _loss_abs) if _loss_abs >= 10.0 else 10.0
+    if win_top > 11.0:
+        for seg in ([bx, bx], [10, win_top]), ([bx, bx + 0.4], [10, 10]), ([bx, bx + 0.4], [win_top, win_top]):
+            cax.plot(seg[0], seg[1], transform=yt, color="#555", lw=1.3, clip_on=False, zorder=4)
+        cax.text(bx - 0.9, (10 + win_top) / 2, "design window", transform=yt, rotation=90,
+                 ha="center", va="center", fontsize=9.5, fontweight="bold", color="#222", clip_on=False)
+        cax.text(bx - 2.1, (10 + win_top) / 2, f"{frac:.1f} % of the swept grid",
+                 transform=yt, rotation=90, ha="center", va="center", fontsize=8.5,
+                 color="#888", clip_on=False)
+    else:
+        # 통과 구간이 색띠 바닥(10 %)보다 아래 → 브래킷을 그릴 자리가 없다. 숫자만 남긴다.
+        cax.text(bx - 0.9, 30, f"{frac:.1f} % of the swept grid", transform=yt, rotation=90,
+                 ha="center", va="center", fontsize=8.5, color="#888", clip_on=False)
 
-    # 상대 기준선(빨강) at MW_loss = loss_max
-    if np.nanmin(m["MW_loss"]) <= mw_loss_max <= np.nanmax(m["MW_loss"]):
-        ax.contour(m["X"], m["Y"], m["MW_loss"], levels=[mw_loss_max], colors=RED,
-                   linewidths=3.5, zorder=3)
-    # 절대 기준선(검정 파선) at MW = target  (배경 밝기 무관하게 흰 후광)
-    if m["MW"].min() <= target_mw <= m["MW"].max():
-        c_abs = ax.contour(m["X"], m["Y"], m["MW"], levels=[target_mw], colors="black",
-                           linestyles="--", linewidths=2.2, zorder=3)
-        _set_pe(c_abs, 3.5, "white")
-
-    # 동적 처방: 흰 원마커 + 박스 숫자(×10¹²) — 그림 밖으로 안 나가게 위치 보정
-    #   ★색 = 그 점의 상한을 정한 기준. 상대면 빨강(빨간 실선 위), 절대면 검정(검은 파선
-    #     위). 어느 쪽도 스윕 범위 안에서 안 걸린 행("none")은 **회색 + "≥10"** 으로
-    #     쓴다 — 그 값은 실제 상한이 아니라 격자 끝(D_it 1e13)이라 하한만 아는 상태다.
-    #     색으로 기준을 말하는 그림에서 이걸 빨강으로 칠하면 걸리지도 않은 기준이 상한을
-    #     정한 것처럼 보인다.
-    for p in presc:
-        d, til, bind = p.get("dit_max"), p.get("t_IL"), p.get("bind")
-        if d is None or d > 1.02e13:
-            continue
-        bc = {"absolute": "black", "relative": RED}.get(bind, "#6b6b6b")
-        ax.plot([d], [til], "o", mfc="white", mec=bc, mew=2.2, ms=9, zorder=6)
-        logpos = (np.log10(d) - 11.0) / 2.0                       # 0(1e11)~1(1e13)
-        xoff, ha = (16, "left") if logpos < 0.24 else (-16, "right")  # 왼쪽 끝이면 박스 오른쪽
-        dy = -13 if til >= 1.9 else (13 if til <= 0.6 else 0)     # 위/아래 끝이면 안쪽으로
-        ax.annotate("≥10" if bind == "none" else f"{d/1e12:.1f}",
-                    xy=(d, til), xytext=(xoff, dy),
-                    textcoords="offset points", ha=ha, va="center",
-                    fontsize=12, fontweight="bold", color="white",
-                    # 상자 배경도 구속 기준의 색으로 — 숫자와 그 숫자를 만든 선이 같은
-                    # 색으로 묶인다. 흰 테두리는 어두운 색띠(보라·남색) 위에서 상자
-                    # 경계가 사라지지 않게 하려고 남긴다.
-                    bbox=dict(boxstyle="round,pad=0.28", fc=bc, ec="white", lw=1.0),
-                    zorder=7)
+    # 상대 기준선 = 굵은 검은 실선 at MW_loss = loss_max
+    has_rel = np.nanmin(m["MW_loss"]) <= mw_loss_max <= np.nanmax(m["MW_loss"])
+    if has_rel:
+        ax.contour(m["X"], m["Y"], m["MW_loss"], levels=[mw_loss_max], colors="black",
+                   linewidths=4.0, zorder=3)
+    # 절대 기준선 = 흰 파선 at MW = target
+    #   ★확정본은 이 선이 빨강·주황 위에 있어 순백으로 충분하지만, 앱은 슬라이더로
+    #     선이 노랑(#feda02) 띠 위로 옮겨 갈 수 있고 거기서는 흰 선이 사라진다.
+    #     → 어두운 후광을 얇게 둘러 어느 띠 위에서든 남게 한다(모양은 흰 파선 그대로).
+    has_abs = m["MW"].min() <= target_mw <= m["MW"].max()
+    if has_abs:
+        # ★contour 의 linestyles 는 대시 튜플을 그대로 못 받는다(리스트로 감싸야 한다)
+        c_abs = ax.contour(m["X"], m["Y"], m["MW"], levels=[target_mw], colors="white",
+                           linestyles=[(0, (3.4, 2.4))], linewidths=2.8, zorder=3)
+        _set_pe(c_abs, 4.8, "#3a3a3a")
 
     ax.set_xscale("log")
     _set_log_unicode(ax, "x")
@@ -163,7 +177,86 @@ def plot_designmap(m, target_mw, mw_loss_max, frac, presc, mw_ref):
     ax.set_xlabel("Interface trap density  D_it  [cm⁻²eV⁻¹]", fontsize=12.5, fontweight="bold")
     ax.set_ylabel("Interfacial layer thickness  t_IL  [nm]", fontsize=12.5, fontweight="bold")
     ax.tick_params(labelsize=11)
-    return fig     # 범례(MW_loss·MW·allowable D_it)는 앱에서 그림 아래에 표시
+    for sp in ax.spines.values():        # 확정본의 굵은 검은 테두리
+        sp.set_linewidth(1.6)
+        sp.set_color("#1a1a1a")
+
+    # ── 범례 = 그림 안 왼쪽 아래 (확정본 배치) ────────────────────────────
+    #   두 기준선은 "무엇과 같은가"까지 적는다: 상대 기준 30 %는 이 스택에서 MW 1.4 V
+    #   와 같은 말이고, 절대 기준 1.0 V는 손실 50 %와 같은 말이다. 이 등가가 없으면
+    #   두 선이 왜 따로 필요한지가 안 보인다.
+    #   ★그려지지 않은 선은 범례에도 넣지 않는다(슬라이더를 끝까지 밀면 선이 격자
+    #     밖으로 나간다 — 없는 선의 이름표만 남으면 고장으로 읽힌다).
+    hs, ls_ = [], []
+    if has_rel:
+        hs.append(Line2D([], [], color="black", lw=4.0))
+        ls_.append(f"MW_loss = {mw_loss_max:.0f} %  (relative)  ≡  "
+                   f"MW = {mw_ref * (1.0 - mw_loss_max / 100.0):.2f} V")
+    if has_abs:
+        # 흰 파선은 흰 범례 바탕에서 사라지므로, 지도에서처럼 어두운 선을 깔고 그 위에
+        # 흰 파선을 얹어 두 개를 한 칸에 겹쳐 그린다(HandlerTuple).
+        # ★matplotlib은 대시 길이에 선폭을 곱한다(lines.scale_dashes) — 그대로 4.5/3.0을
+        #   주면 굵은 선에서 대시 한 칸이 범례 손잡이보다 길어져 통짜 막대로 보인다.
+        #   → 선폭으로 나눈 값을 넣어 실제 4.5pt/3.0pt 가 되게 한다.
+        hs.append((Line2D([], [], color="#3a3a3a", lw=5.4),
+                   Line2D([], [], color="white", lw=3.0, ls=(0, (1.5, 1.0)))))
+        ls_.append(f"MW = {target_mw:.2f} V  (absolute)  ≡  {_loss_abs:.0f} %")
+    hs.append(Line2D([], [], ls="none", marker="o", mfc="white", mec="black",
+                     mew=2.6, ms=10))
+    ls_.append("allowable D_it  [×10¹² cm⁻²eV⁻¹]")
+    # ★HandlerTuple(ndivide=1) 이라야 두 선이 **겹쳐** 그려진다. ndivide=None 은 손잡이
+    #   칸을 튜플 개수만큼 나눠 나란히 그린다(실측: 왼쪽 절반 검정 + 오른쪽 절반 흰 조각).
+    leg = ax.legend(hs, ls_, handler_map={tuple: HandlerTuple(ndivide=1, pad=0)},
+                    loc="lower left", fontsize=10.5, framealpha=1.0, facecolor="white",
+                    edgecolor="black", borderpad=0.6, labelspacing=0.6, handlelength=2.4,
+                    handletextpad=1.0)
+    leg.get_frame().set_linewidth(1.4)
+    leg.set_zorder(8)
+
+    # ── 처방점(흰 원) + 허용 D_it 숫자 상자 ────────────────────────────────
+    #   확정본은 점·상자를 흰 바탕 + 검은 테두리로 통일한다(어느 기준이 구속인지는 지도
+    #   아래 안내 띠가 말한다). "none"(스윕 끝까지 두 기준 다 안 걸림)만 회색으로 남긴다
+    #   — 그 값은 진짜 상한이 아니라 격자 끝이라, 검정으로 칠하면 걸리지도 않은 기준이
+    #   상한을 정한 것처럼 보인다.
+    #   ★범례가 그림 안에 있으므로 상자가 그 뒤로 숨을 수 있다(실측: 목표 1.60 V에서
+    #     t_IL 0.5 행의 숫자가 범례에 완전히 가려졌다). 자리를 [왼쪽 → 오른쪽 → 위쪽]
+    #     순서로 시도해 범례와도 축 밖과도 겹치지 않는 첫 자리에 놓는다.
+    FigureCanvasAgg(fig)                     # 범례 크기를 재려면 렌더러가 필요하다
+    lb = leg.get_window_extent(fig.canvas.get_renderer()).transformed(ax.transAxes.inverted())
+    W = fig.get_size_inches()[0] * 0.66 * 72.0      # 축 폭 [pt]
+    H = fig.get_size_inches()[1] * 0.80 * 72.0      # 축 높이 [pt]
+    for p in presc:
+        d, til, bind = p.get("dit_max"), p.get("t_IL"), p.get("bind")
+        if d is None or d > 1.02e13:
+            continue
+        ec = "#6b6b6b" if bind == "none" else "black"
+        ax.plot([d], [til], "o", mfc="white", mec=ec, mew=3.0, ms=11, zorder=6)
+
+        txt = "≥10" if bind == "none" else f"{d / 1e12:.1f}"
+        fx = (np.log10(d) - (11 - PAD_DEC)) / (2 + 2 * PAD_DEC)     # 마커 위치[축 분율]
+        fy = (til - (0.5 - PAD_TIL)) / (1.5 + 2 * PAD_TIL)
+        bw, bh = (len(txt) * 8.2 + 12) / W, 26.0 / H                # 상자 크기[축 분율]
+        dy0 = -15 if til >= 1.9 else (15 if til <= 0.6 else 0)      # 위/아래 끝이면 안쪽으로
+        pick = None
+        for xoff, dy, ha in ((-18, dy0, "right"), (18, dy0, "left"),
+                             (-18, 30, "right"), (18, 30, "left"), (0, 34, "center")):
+            cx = fx + xoff / W + (0 if ha == "center" else
+                                  (-bw / 2 if ha == "right" else bw / 2))
+            cy = fy + dy / H
+            x0, x1, y0, y1 = cx - bw / 2, cx + bw / 2, cy - bh / 2, cy + bh / 2
+            if x0 < 0.004 or x1 > 0.996 or y0 < 0.004 or y1 > 0.996:
+                continue                                            # 축 밖으로 나감
+            if not (x1 < lb.x0 or x0 > lb.x1 or y1 < lb.y0 or y0 > lb.y1):
+                continue                                            # 범례와 겹침
+            pick = (xoff, dy, ha)
+            break
+        xoff, dy, ha = pick or (-18, dy0, "right")
+        ax.annotate(txt, xy=(d, til), xytext=(xoff, dy),
+                    textcoords="offset points", ha=ha, va="center",
+                    fontsize=13, fontweight="bold", color=ec,
+                    bbox=dict(boxstyle="round,pad=0.32", fc="white", ec=ec, lw=2.0),
+                    zorder=7)
+    return fig
 
 
 def _clean(vals):
