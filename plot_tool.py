@@ -22,18 +22,16 @@ import matplotlib.patheffects as pe
 #   경고). 서버에서 렌더만 할 때는 Figure 를 직접 쓰는 것이 공식 권장 방식이고, 전역
 #   상태가 없어져 스레드 반복 실행에서 생기는 문제(이 파일 위쪽 mathtext 주석 참조)의
 #   여지도 줄어든다.
-from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.colors import ListedColormap
 from matplotlib.figure import Figure
-from matplotlib.legend_handler import HandlerTuple
-from matplotlib.lines import Line2D
-from matplotlib.patches import Patch
 from matplotlib.ticker import FuncFormatter, NullFormatter, LogLocator
 
-RED = "#d1341f"
-BLUE = "#1f6fd6"
-TEAL = "#0f8a7e"    # 포스터 v4 그림3 하우스 색 (P_r 곡선)
-PLUM = "#8e44ad"    # 〃 (D_it=5e12 에서의 t_IL — 상호작용 곡선)
+# ── 곡선 색 (2026-08-05 확정본 '스크린샷(253)'에서 픽셀로 추출) ─────────────
+#   design map 색띠와 같은 계열로 통일된다: 지도 컬러바의 빨간 눈금도 #ff0000 이다.
+RED = "#ff0000"     # t_IL (기준 D_it) · 지도 컬러바의 상대 기준 눈금
+BLUE = "#0070c0"    # t_FE · 처방 곡선
+GREEN = "#00b050"   # P_r
+PINK = "#d86ecc"    # D_it 를 올렸을 때의 t_IL (상호작용 곡선, 파선)
 
 # ── design map 색띠 (2026-08-05 확정본 '스크린샷(261)'에서 픽셀로 추출) ──────
 #   matplotlib 기본 컬러맵이 아니다 — 가장 가까운 것(gist_earth)과도 평균 |ΔRGB| 36
@@ -95,12 +93,13 @@ def _set_pe(cs, lw, fg):
 
 
 def plot_designmap(m, target_mw, mw_loss_max, frac, presc, mw_ref):
-    """MW_loss design map — 2026-08-05 확정 디자인('스크린샷(251)').
+    """MW_loss design map — 2026-08-05 확정 디자인(레이아웃 '스크린샷(251)' · 색 '(261)').
 
     5 % 간격 이산 색띠(위 LOSS_BANDS) + >50 % 삼각형, 사선 없음.
     상대 기준선 = **굵은 검은 실선**, 절대 기준선 = **흰 파선**, 처방점 = 흰 원(검은
-    테두리) + 흰 상자에 검은 숫자, 범례는 **그림 안 왼쪽 아래**.
-    컬러바: 빨간 눈금(상대) · 검은 눈금(절대) · design window 브래킷.
+    테두리) + 흰 상자에 검은 숫자. 컬러바: 빨간 눈금(상대) · 검은 눈금(절대) ·
+    design window 브래킷.
+    ★범례는 그림 안에 두지 않는다 — 앱이 그림 **아래**에 현재 값으로 문장을 만든다.
 
     presc: [{t_IL, dit_max, bind}, ...] (t_IL 0.5/1.0/1.5/2.0),  mw_ref: 정규화 기준선(V).
     """
@@ -183,48 +182,13 @@ def plot_designmap(m, target_mw, mw_loss_max, frac, presc, mw_ref):
         sp.set_linewidth(1.6)
         sp.set_color("#1a1a1a")
 
-    # ── 범례 = 그림 안 왼쪽 아래 (확정본 배치) ────────────────────────────
-    #   두 기준선은 "무엇과 같은가"까지 적는다: 상대 기준 30 %는 이 스택에서 MW 1.4 V
-    #   와 같은 말이고, 절대 기준 1.0 V는 손실 50 %와 같은 말이다. 이 등가가 없으면
-    #   두 선이 왜 따로 필요한지가 안 보인다.
-    #   ★그려지지 않은 선은 범례에도 넣지 않는다(슬라이더를 끝까지 밀면 선이 격자
-    #     밖으로 나간다 — 없는 선의 이름표만 남으면 고장으로 읽힌다).
-    hs, ls_ = [], []
-    if has_rel:
-        hs.append(Line2D([], [], color="black", lw=4.0))
-        ls_.append(f"MW_loss = {mw_loss_max:.0f} %  (relative)  ≡  "
-                   f"MW = {mw_ref * (1.0 - mw_loss_max / 100.0):.2f} V")
-    if has_abs:
-        # 흰 파선은 흰 범례 바탕에서 사라지므로, 지도에서처럼 어두운 선을 깔고 그 위에
-        # 흰 파선을 얹어 두 개를 한 칸에 겹쳐 그린다(HandlerTuple).
-        # ★matplotlib은 대시 길이에 선폭을 곱한다(lines.scale_dashes) — 그대로 4.5/3.0을
-        #   주면 굵은 선에서 대시 한 칸이 범례 손잡이보다 길어져 통짜 막대로 보인다.
-        #   → 선폭으로 나눈 값을 넣어 실제 4.5pt/3.0pt 가 되게 한다.
-        hs.append((Line2D([], [], color="#3a3a3a", lw=5.4),
-                   Line2D([], [], color="white", lw=3.0, ls=(0, (1.5, 1.0)))))
-        ls_.append(f"MW = {target_mw:.2f} V  (absolute)  ≡  {_loss_abs:.0f} %")
-    hs.append(Line2D([], [], ls="none", marker="o", mfc="white", mec="black",
-                     mew=2.6, ms=10))
-    ls_.append("allowable D_it  [×10¹² cm⁻²eV⁻¹]")
-    # ★HandlerTuple(ndivide=1) 이라야 두 선이 **겹쳐** 그려진다. ndivide=None 은 손잡이
-    #   칸을 튜플 개수만큼 나눠 나란히 그린다(실측: 왼쪽 절반 검정 + 오른쪽 절반 흰 조각).
-    leg = ax.legend(hs, ls_, handler_map={tuple: HandlerTuple(ndivide=1, pad=0)},
-                    loc="lower left", fontsize=10.5, framealpha=1.0, facecolor="white",
-                    edgecolor="black", borderpad=0.6, labelspacing=0.6, handlelength=2.4,
-                    handletextpad=1.0)
-    leg.get_frame().set_linewidth(1.4)
-    leg.set_zorder(8)
-
     # ── 처방점(흰 원) + 허용 D_it 숫자 상자 ────────────────────────────────
     #   확정본은 점·상자를 흰 바탕 + 검은 테두리로 통일한다(어느 기준이 구속인지는 지도
     #   아래 안내 띠가 말한다). "none"(스윕 끝까지 두 기준 다 안 걸림)만 회색으로 남긴다
     #   — 그 값은 진짜 상한이 아니라 격자 끝이라, 검정으로 칠하면 걸리지도 않은 기준이
     #   상한을 정한 것처럼 보인다.
-    #   ★범례가 그림 안에 있으므로 상자가 그 뒤로 숨을 수 있다(실측: 목표 1.60 V에서
-    #     t_IL 0.5 행의 숫자가 범례에 완전히 가려졌다). 자리를 [왼쪽 → 오른쪽 → 위쪽]
-    #     순서로 시도해 범례와도 축 밖과도 겹치지 않는 첫 자리에 놓는다.
-    FigureCanvasAgg(fig)                     # 범례 크기를 재려면 렌더러가 필요하다
-    lb = leg.get_window_extent(fig.canvas.get_renderer()).transformed(ax.transAxes.inverted())
+    #   ★범례는 그림 안에 두지 않는다(설명은 앱이 그림 **아래**에 동적으로 쓴다).
+    #     상자는 [왼쪽 → 오른쪽 → 위쪽] 순으로 축 밖을 벗어나지 않는 첫 자리에 놓는다.
     W = fig.get_size_inches()[0] * 0.66 * 72.0      # 축 폭 [pt]
     H = fig.get_size_inches()[1] * 0.80 * 72.0      # 축 높이 [pt]
     for p in presc:
@@ -248,8 +212,6 @@ def plot_designmap(m, target_mw, mw_loss_max, frac, presc, mw_ref):
             x0, x1, y0, y1 = cx - bw / 2, cx + bw / 2, cy - bh / 2, cy + bh / 2
             if x0 < 0.004 or x1 > 0.996 or y0 < 0.004 or y1 > 0.996:
                 continue                                            # 축 밖으로 나감
-            if not (x1 < lb.x0 or x0 > lb.x1 or y1 < lb.y0 or y0 > lb.y1):
-                continue                                            # 범례와 겹침
             pick = (xoff, dy, ha)
             break
         xoff, dy, ha = pick or (-18, dy0, "right")
@@ -292,7 +254,7 @@ def plot_prescription(til, dit_nom, dit_lo, dit_hi, mw_loss_max, target_mw, show
     return fig
 
 
-NAVY = "#24406e"    # 소패널 제목 색 (1d민감도 수정안)
+NAVY = "#1f3b63"    # 소패널 제목 색 (스크린샷(253)에서 추출)
 
 
 def plot_sensitivity(panels, target_mw):
@@ -339,13 +301,20 @@ def plot_sensitivity(panels, target_mw):
             if s.get("label"):
                 pending.append((ax, s, float(x[-1]), float(y[-1])))
 
-        ax.axhline(target_mw, color="black", ls="--", lw=1.6, zorder=2)
+        # 목표 MW = 절대 기준 → design map 과 **같은 표기**로 통일한다(흰 파선 + 어두운
+        # 후광). 배경이 흰 이 그림에서는 후광이 실제로 보이는 선이 되고, 속이 빈 파선
+        # 모양이 그대로 남아 지도의 그 선과 같은 것임이 눈에 붙는다.
+        #   후광은 지도(4.8/2.8 = 1.7배)보다 두껍게 준다. 흰 바탕에서는 흰 심이 안 보이고
+        #   후광만 남는데, 얇으면 가는 두 줄(철길)처럼 보여 파선인지도 알 수 없다.
+        ax.axhline(target_mw, color="white", lw=3.2, ls=(0, (2.4, 1.8)), zorder=2,
+                   path_effects=[pe.withStroke(linewidth=6.6, foreground="#3a3a3a")])
 
         cur = p.get("cur")
         if cur is not None:
-            # 축 끝에 걸려도 반쪽만 그려지지 않도록 clip 해제
-            ax.plot([cur[0]], [cur[1]], "o", ms=10.5, mfc="white", mec="#333",
-                    mew=2.4, zorder=7, clip_on=False)
+            # 확정본(253)의 현재 설계점 = 곡선 색 테두리 + 흰 속. 선보다 확실히 굵고 크게.
+            # 축 끝에 걸려도 반쪽만 그려지지 않도록 clip 해제.
+            ax.plot([cur[0]], [cur[1]], "o", ms=14, mfc="white",
+                    mec=p["series"][0]["color"], mew=3.0, zorder=7, clip_on=False)
 
         xs = np.concatenate([np.asarray(s["x"], float) for s in p["series"]])
         ax.set_xlim(float(xs.min()), float(xs.max()))
@@ -388,20 +357,8 @@ def plot_sensitivity(panels, target_mw):
                     fontsize=12, color=s["color"], fontweight="bold",
                     zorder=6, path_effects=halo)
 
-    for ax, p in zip(axes, panels):
-        cur, note = p.get("cur"), p.get("cur_note")
-        if cur is None or not note:
-            continue
-        xa, xb = ax.get_xlim()
-        right = (cur[0] - xa) / (xb - xa) > 0.55      # 오른쪽에 있으면 왼쪽으로 뺀다
-        up = _frac(cur[1]) < 0.72                     # 위쪽에 있으면 아래로 단다
-        ax.annotate(note, xy=cur,
-                    xytext=(-14 if right else 14, 34 if up else -34),
-                    textcoords="offset points",
-                    ha="right" if right else "left", va="center",
-                    fontsize=11, color="#555", zorder=7, path_effects=halo,
-                    arrowprops=dict(arrowstyle="-", color="#999", lw=1.0,
-                                    shrinkA=2, shrinkB=6))
+    # (현재 설계점이 무엇인지는 그림 안에 적지 않는다 — 설명은 앱이 그림 아래에 쓴다.
+    #  확정본 253에도 그런 주석은 없고, 원 자체가 곡선 색이라 어느 곡선 위인지는 보인다.)
 
     # 목표선은 세 패널을 가로지르므로 이름표는 맨 왼쪽에 한 번만 단다
     axes[0].annotate(f"target {target_mw:.2f} V", xy=(0.02, target_mw),
